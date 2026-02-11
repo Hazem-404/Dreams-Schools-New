@@ -257,6 +257,9 @@
                     <button onclick="Admin.switchTab('Monitoring')"
                         class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
                         data-tab="Monitoring"><i class="fas fa-eye mr-2 ml-1"></i>المتابعة</button>
+                    <button onclick="Admin.switchTab('ClassControl')"
+                        class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
+                        data-tab="ClassControl"><i class="fas fa-edit mr-2 ml-1"></i>متابعة الفصول</button>
                 </div>
 
                 <!-- LATEST NEWS TICKER (Visible to All) -->
@@ -585,7 +588,9 @@
                 content.innerHTML = '<div class="text-center p-10"><div class="spinner mx-auto border-gray-300 border-t-emerald-500"></div></div>';
 
                 if (tab === 'Stats') return this.loadStats();
+                if (tab === 'Stats') return this.loadStats();
                 if (tab === 'Monitoring') return this.renderMonitoring();
+                if (tab === 'ClassControl') return this.renderClassControl();
 
                 // Load Data Table
                 try {
@@ -1026,6 +1031,70 @@
                     else if (filter === 'Absent') el.style.display = (status === 'Absent') ? 'flex' : 'none';
                     else if (filter === 'Note') el.style.display = (hasNote) ? 'flex' : 'none';
                 });
+            },
+
+            async renderClassControl() {
+                const html = `
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 max-w-2xl mx-auto animate-fadeIn">
+                        <div class="text-center mb-6">
+                            <div class="bg-emerald-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-emerald-600">
+                                <i class="fas fa-chalkboard-teacher text-3xl"></i>
+                            </div>
+                            <h3 class="font-bold text-xl text-gray-800">متابعة الفصول (تسجيل الحصص)</h3>
+                            <p class="text-gray-500 text-sm">حدد الفصل والمادة لفتح سجل المتابعة اليومي</p>
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-gray-700 font-bold mb-2">الفصل</label>
+                                <select id="ctrlClass" class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50 font-bold">
+                                    <option value="">-- اختر الفصل --</option>
+                                    ${this.lookups.classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 font-bold mb-2">المادة</label>
+                                <select id="ctrlSubject" class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50 font-bold">
+                                    <option value="">-- اختر المادة --</option>
+                                    ${this.lookups.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                                </select>
+                            </div>
+                            <button onclick="Admin.openClassLog()" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-700 transition transform active:scale-[0.98]">
+                                <i class="fas fa-arrow-left ml-2"></i>فتح السجل
+                            </button>
+                        </div>
+                    </div>
+                    <div id="adminLogArea" class="mt-8"></div>
+                `;
+                document.getElementById('dashboardContent').innerHTML = html;
+            },
+
+            openClassLog() {
+                const classId = document.getElementById('ctrlClass').value;
+                const subjectId = document.getElementById('ctrlSubject').value;
+
+                if (!classId || !subjectId) return UI.showError("يرجى اختيار الفصل والمادة");
+
+                const className = this.getName(this.lookups.classes, classId);
+                const subjectName = this.getName(this.lookups.subjects, subjectId);
+
+                // Prepare Data object for Teacher module
+                const classObj = {
+                    classId: classId,
+                    className: className,
+                    subjectId: subjectId,
+                    subjectName: subjectName
+                };
+
+                // Render Teacher Log Form into adminLogArea
+                // We need to hijack Teacher module's container target temporarily or pass a target ID
+                // Refactoring Teacher.loadLogForm to accept target container.
+
+                // For now, let's just clear dashboard content and show the form full screen? 
+                // Better: Render in a modal or just replace the content area.
+                // Let's use the 'adminLogArea' div created above.
+
+                Teacher.loadLogForm(classObj, 'adminLogArea');
             }
         };
 
@@ -1233,21 +1302,35 @@
                 });
 
                 // Clear or Reload
-                document.getElementById('teacherWorkArea').innerHTML = '';
+                const area = document.getElementById('teacherWorkArea');
+                if (area) area.innerHTML = '';
+
                 if (tab === 'Log') {
-                    document.getElementById('teacherClassSelect').value = ""; // Reset select
-                    document.getElementById('teacherClassSelect').classList.remove('hidden');
+                    const sel = document.getElementById('teacherClassSelect');
+                    if (sel) {
+                        sel.value = "";
+                        sel.classList.remove('hidden');
+                    }
                 }
             },
 
-            async loadLogForm(idx) {
-                if (this.currentTab !== 'Log') return;
-                if (idx === "") { document.getElementById('teacherWorkArea').innerHTML = ""; return; }
+            async loadLogForm(idxOrObj, targetId = 'teacherWorkArea') {
+                // Determine Mode: Teacher (Index) or Admin (Object)
+                let cls;
+                if (typeof idxOrObj === 'object') {
+                    cls = idxOrObj; // Admin Mode
+                } else {
+                    if (this.currentTab !== 'Log') return;
+                    if (idxOrObj === "") { document.getElementById(targetId).innerHTML = ""; return; }
+                    cls = this.classes[idxOrObj]; // Teacher Mode
+                }
 
-                const cls = this.classes[idx];
                 this.currentClass = cls;
+                this.currentTargetId = targetId; // Save for submitLog cleanup
 
-                const area = document.getElementById('teacherWorkArea');
+                const area = document.getElementById(targetId);
+                if (!area) return console.error("Target area not found: " + targetId);
+
                 area.innerHTML = '<div class="spinner mx-auto"></div>';
 
                 try {
@@ -1337,8 +1420,15 @@
 
                     if (res.success) {
                         UI.showError("تم حفظ التقرير بنجاح");
-                        document.getElementById('teacherWorkArea').innerHTML = "";
-                        document.querySelector('select').value = "";
+                        document.getElementById(this.currentTargetId).innerHTML = "";
+
+                        // Reset Select if in Teacher Mode
+                        const sel = document.getElementById('teacherClassSelect');
+                        if (sel && !sel.classList.contains('hidden')) {
+                            const selectEl = sel.querySelector('select'); // The actual select inside the div
+                            if (selectEl) selectEl.value = "";
+                        }
+
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     } else {
                         alert(res.message);
