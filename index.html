@@ -569,10 +569,15 @@
                     this.switchTab('Stats');
                 }
 
-                // Fetch Lookups for Dropdowns
                 try {
                     const res = await App.call('getAdminLookups');
-                    if (res.success) this.lookups = res;
+                    if (res.success) {
+                        this.lookups = res;
+                        // Pre-format Class Names to include Number
+                        this.lookups.classes.forEach(c => {
+                            c.displayName = `${c.name} ${c.number ? '- ' + c.number : ''}`;
+                        });
+                    }
                 } catch (e) { console.error("Failed to load lookups", e); }
             },
 
@@ -731,7 +736,7 @@
 
             getName(list, id) {
                 const item = list.find(i => String(i.id) === String(id));
-                return item ? item.name : id;
+                return item ? (item.displayName || item.name) : id;
             },
 
             openEdit(type, rowIndex) {
@@ -809,7 +814,7 @@
                 return `
                     <select id="edit_f_${idx}" class="w-full p-2 border rounded-lg outline-none focus:border-emerald-500 bg-white" required>
                         <option value="">-- اختر --</option>
-                        ${list.map(item => `<option value="${item.id}" ${String(item.id) === String(selectedVal) ? 'selected' : ''}>${item.name}</option>`).join('')}
+                        ${list.map(item => `<option value="${item.id}" ${String(item.id) === String(selectedVal) ? 'selected' : ''}>${item.displayName || item.name}</option>`).join('')}
                     </select>
                 `;
             },
@@ -1049,7 +1054,7 @@
                                 <label class="block text-gray-700 font-bold mb-2">الفصل</label>
                                 <select id="ctrlClass" class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50 font-bold">
                                     <option value="">-- اختر الفصل --</option>
-                                    ${this.lookups.classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                                    ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName || c.name}</option>`).join('')}
                                 </select>
                             </div>
                             <div>
