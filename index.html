@@ -242,24 +242,38 @@
                     <button onclick="Admin.switchTab('Stats')"
                         class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap active-tab"
                         data-tab="Stats"><i class="fas fa-chart-pie mr-2 ml-1"></i>الرئيسية</button>
+
+                    <button onclick="Admin.switchTab('Monitoring')"
+                        class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
+                        data-tab="Monitoring"><i class="fas fa-eye mr-2 ml-1"></i>المتابعة اليومية</button>
+
+                    <button onclick="Admin.switchTab('ClassControl')"
+                        class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
+                        data-tab="ClassControl"><i class="fas fa-edit mr-2 ml-1"></i>تسجيل الحصص</button>
+
+                    <div class="w-px bg-gray-300 mx-1"></div> <!-- Separator -->
+
                     <button onclick="Admin.switchTab('Users')"
                         class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
                         data-tab="Users"><i class="fas fa-users mr-2 ml-1"></i>المستخدمين</button>
+
+                    <button onclick="Admin.switchTab('Enrollments')"
+                        class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
+                        data-tab="Enrollments"><i class="fas fa-user-graduate mr-2 ml-1"></i>الطلاب في الفصول</button>
+
+                    <button onclick="Admin.switchTab('Allocations')"
+                        class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
+                        data-tab="Allocations"><i class="fas fa-link mr-2 ml-1"></i>توزيع المعلمين</button>
+
+                    <div class="w-px bg-gray-300 mx-1"></div> <!-- Separator -->
+
                     <button onclick="Admin.switchTab('Classes')"
                         class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
                         data-tab="Classes"><i class="fas fa-chalkboard mr-2 ml-1"></i>الفصول</button>
-                    <button onclick="Admin.switchTab('Allocations')"
-                        class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
-                        data-tab="Allocations"><i class="fas fa-link mr-2 ml-1"></i>التوزيع</button>
+
                     <button onclick="Admin.switchTab('Subjects')"
                         class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
                         data-tab="Subjects"><i class="fas fa-book mr-2 ml-1"></i>المواد</button>
-                    <button onclick="Admin.switchTab('Monitoring')"
-                        class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
-                        data-tab="Monitoring"><i class="fas fa-eye mr-2 ml-1"></i>المتابعة</button>
-                    <button onclick="Admin.switchTab('ClassControl')"
-                        class="px-4 py-2 rounded-lg font-bold text-sm bg-white border border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 transition whitespace-nowrap"
-                        data-tab="ClassControl"><i class="fas fa-edit mr-2 ml-1"></i>متابعة الفصول</button>
                 </div>
 
                 <!-- LATEST NEWS TICKER (Visible to All) -->
@@ -546,7 +560,7 @@
             currentTab: 'Stats',
             isSupervisor: false,
             cache: {},
-            lookups: { teachers: [], classes: [], subjects: [] },
+            lookups: { teachers: [], classes: [], subjects: [], students: [] },
 
             async init(isSupervisor = false) {
                 this.isSupervisor = isSupervisor;
@@ -558,9 +572,9 @@
                 // Supervisor Restrictions
                 // Only: Allocations (Monitoring via button if exists, wait, Supervisor needs Monitoring too)
                 // Supervisor sees: Allocations, Monitoring. 
-                // Hides: Stats, Users, Classes, Subjects
+                // Hides: Stats, Users, Classes, Subjects, Enrollments
                 if (this.isSupervisor) {
-                    ['Stats', 'Users', 'Classes', 'Subjects'].forEach(t => {
+                    ['Stats', 'Users', 'Classes', 'Subjects', 'Enrollments'].forEach(t => {
                         const btn = document.querySelector(`button[data-tab="${t}"]`);
                         if (btn) btn.classList.add('hidden');
                     });
@@ -581,6 +595,9 @@
                 } catch (e) { console.error("Failed to load lookups", e); }
             },
 
+            allData: [], // Store raw data for filtering
+            currentHeader: [],
+
             async switchTab(tab) {
                 this.currentTab = tab;
                 // Update UI tabs
@@ -592,7 +609,6 @@
                 const content = document.getElementById('dashboardContent');
                 content.innerHTML = '<div class="text-center p-10"><div class="spinner mx-auto border-gray-300 border-t-emerald-500"></div></div>';
 
-                if (tab === 'Stats') return this.loadStats();
                 if (tab === 'Stats') return this.loadStats();
                 if (tab === 'Monitoring') return this.renderMonitoring();
                 if (tab === 'ClassControl') return this.renderClassControl();
@@ -610,10 +626,118 @@
                         if (tab === 'Subjects') res.header = ['المعرف', 'اسم المادة'], res.data = [];
                         if (tab === 'Users') res.header = ['المعرف', 'الاسم', 'الدور', 'الهاتف', 'كلمة المرور', 'نشط'], res.data = [];
                     }
-                    this.renderTable(tab, res.header, res.data);
+
+                    this.allData = res.data || [];
+                    this.currentHeader = res.header;
+
+                    // Render Filters & Table
+                    this.renderFilters(tab);
+                    this.applyFilters();
+
                 } catch (e) {
                     content.innerHTML = `<div class="bg-red-100 text-red-600 p-4 rounded-xl text-center">${e.message}</div>`;
                 }
+            },
+
+            renderFilters(tab) {
+                const content = document.getElementById('dashboardContent');
+                let filterHtml = '';
+
+                if (tab === 'Users') {
+                    filterHtml = `
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex gap-4 items-center">
+                            <span class="font-bold text-gray-700 text-sm"><i class="fas fa-filter text-emerald-500 ml-2"></i>تصفية حسب:</span>
+                            <select id="filterStart" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
+                                <option value="">كل الأدوار</option>
+                                <option value="Teacher">معلم</option>
+                                <option value="Parent">ولي أمر</option>
+                                <option value="Supervisor">مشرف</option>
+                                <option value="Admin">إدارة</option>
+                            </select>
+                        </div>
+                        <div id="tableContainer"></div>
+                    `;
+                } else if (tab === 'Allocations') {
+                    // Allocations: [ID, TeacherID, ClassID, SubjectID]
+                    filterHtml = `
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex flex-wrap gap-4 items-center">
+                            <span class="font-bold text-gray-700 text-sm"><i class="fas fa-filter text-emerald-500 ml-2"></i>تصفية حسب:</span>
+                            
+                            <select id="filterClass" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
+                                <option value="">كل الفصول</option>
+                                ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
+                            </select>
+
+                            <select id="filterSubject" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
+                                <option value="">كل المواد</option>
+                                ${this.lookups.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                            </select>
+
+                            <select id="filterTeacher" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
+                                <option value="">كل المعلمين</option>
+                                ${this.lookups.teachers.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        </div>
+                        <div id="tableContainer"></div>
+                    `;
+                } else if (tab === 'Enrollments') {
+                    filterHtml = `
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex flex-wrap gap-4 items-center">
+                            <span class="font-bold text-gray-700 text-sm"><i class="fas fa-filter text-emerald-500 ml-2"></i>تصفية حسب:</span>
+                            <select id="filterClass" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
+                                <option value="">كل الفصول</option>
+                                ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div id="tableContainer"></div>
+                    `;
+                } else {
+                    filterHtml = `<div id="tableContainer"></div>`;
+                }
+
+                // Add Bulk Action Bar (Hidden by default)
+                filterHtml += `
+                    <div id="bulkActionBar" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-2xl z-50 flex items-center gap-4 hidden transition-all duration-300 border border-gray-700">
+                        <span class="font-bold text-sm text-emerald-400"><span id="selectedCount" class="text-white">0</span> طالب محدد</span>
+                        <div class="h-4 w-px bg-gray-700"></div>
+                        <button onclick="Admin.openBulkMove()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-full font-bold text-xs transition flex items-center shadow-lg shadow-emerald-900/50">
+                            <i class="fas fa-exchange-alt ml-2"></i>نقل الفصل
+                        </button>
+                        <button onclick="Admin.clearSelection()" class="text-gray-400 hover:text-white transition p-1"><i class="fas fa-times"></i></button>
+                    </div>
+                `;
+
+                content.innerHTML = filterHtml;
+            },
+
+            applyFilters() {
+                const tab = this.currentTab;
+                let filtered = this.allData;
+
+                if (tab === 'Users') {
+                    const role = document.getElementById('filterStart') ? document.getElementById('filterStart').value : '';
+                    if (role) {
+                        // Role is at Index 2
+                        filtered = filtered.filter(row => row[2] === role);
+                    }
+                } else if (tab === 'Allocations') {
+                    const classId = document.getElementById('filterClass') ? document.getElementById('filterClass').value : '';
+                    const subId = document.getElementById('filterSubject') ? document.getElementById('filterSubject').value : '';
+                    const teacherId = document.getElementById('filterTeacher') ? document.getElementById('filterTeacher').value : '';
+
+
+                    // Allocations: [ID, TeacherID, ClassID, SubjectID, Year]
+                    if (classId) filtered = filtered.filter(row => String(row[2]) === String(classId));
+                    if (subId) filtered = filtered.filter(row => String(row[3]) === String(subId));
+                    if (teacherId) filtered = filtered.filter(row => String(row[1]) === String(teacherId));
+                } else if (tab === 'Enrollments') {
+                    const classId = document.getElementById('filterClass') ? document.getElementById('filterClass').value : '';
+                    // Enrollments: [ID, StudentID, ClassID]
+                    if (classId) filtered = filtered.filter(row => String(row[2]) === String(classId));
+                }
+
+                this.renderTable(tab, this.currentHeader, filtered);
             },
 
             async loadStats() {
@@ -666,7 +790,8 @@
                     'Users': ['المعرف', 'الاسم', 'الدور', 'الهاتف', 'كلمة المرور', 'نشط'],
                     'Classes': ['معرف الفصل', 'اسم الفصل', 'رقم الفصل'], // Modified: No Supervisor, No Notes
                     'Subjects': ['المعرف', 'اسم المادة', 'الاسم الانجليزي'],
-                    'Allocations': ['معرف التوزيع', 'المعلم', 'الفصل', 'المادة', 'السنة']
+                    'Allocations': ['معرف التوزيع', 'المعلم', 'الفصل', 'المادة', 'السنة'],
+                    'Enrollments': ['معرف القيد', 'الطالب', 'الفصل']
                 };
                 const displayHeader = headerMap[type] || header;
 
@@ -681,12 +806,17 @@
                         if (colIndex === 2) return this.getName(this.lookups.classes, val); // Class
                         if (colIndex === 3) return this.getName(this.lookups.subjects, val); // Subject
                     }
+                    if (type === 'Enrollments') {
+                        if (colIndex === 1) return this.getName(this.lookups.students, val); // Student
+                        if (colIndex === 2) return this.getName(this.lookups.classes, val); // Class
+                    }
                     return val;
                 };
 
                 const safeData = data || [];
                 const tableRows = safeData.map((row, rIndex) => `
                     <tr class="hover:bg-gray-50 border-b last:border-0 transition">
+                        ${type === 'Enrollments' ? `<td class="p-3"><input type="checkbox" class="row-checkbox w-4 h-4 accent-emerald-600" value="${row[0]}" onchange="Admin.updateSelection()"></td>` : ''}
                         ${row.map((cell, cIndex) => {
                     if (cIndex === 0) return ''; // Hide ID Column
                     if (type === 'Allocations' && cIndex === 4) return ''; // Hide Year
@@ -716,6 +846,7 @@
                         <table class="w-full text-right">
                             <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-bold">
                                 <tr>
+                                    ${type === 'Enrollments' ? '<th class="p-3 w-10"><input type="checkbox" onchange="Admin.toggleSelectAll(this)" class="w-4 h-4 accent-emerald-600"></th>' : ''}
                                     ${(displayHeader || []).map((h, i) => {
                     if (i === 0) return '';
                     if (type === 'Allocations' && i === 4) return '';
@@ -731,7 +862,9 @@
                         </table>
                     </div>
                 `;
-                document.getElementById('dashboardContent').innerHTML = html;
+
+                const container = document.getElementById('tableContainer') || document.getElementById('dashboardContent');
+                container.innerHTML = html;
             },
 
             getName(list, id) {
@@ -749,20 +882,25 @@
                 document.getElementById('adminEditTitle').innerText = isNew ? `إضافة` : `تعديل`;
 
                 // INPUT BUILDER
-                const formHtml = header.map((h, i) => {
+                const formHtml = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${header.map((h, i) => {
                     const isReadOnly = (i === 0 && !isNew); // ID is readonly on edit
                     let inputField = '';
 
                     // 1. Users Role Dropdown (Column Index 2)
                     if (type === 'Users' && i === 2) {
                         inputField = `
-                            <select id="edit_f_${i}" class="w-full p-2 border rounded-lg outline-none focus:border-emerald-500 bg-white">
-                                <option value="Teacher" ${row[i] === 'Teacher' ? 'selected' : ''}>معلم</option>
-                                <option value="Parent" ${row[i] === 'Parent' ? 'selected' : ''}>ولي أمر</option>
-                                <option value="Admin" ${row[i] === 'Admin' ? 'selected' : ''}>إدارة</option>
-                                <option value="Supervisor" ${row[i] === 'Supervisor' ? 'selected' : ''}>مشرف</option>
-                            </select>
-                        `;
+                                <div class="relative">
+                                    <select id="edit_f_${i}" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-gray-700 font-bold">
+                                        <option value="Teacher" ${row[i] === 'Teacher' ? 'selected' : ''}>معلم</option>
+                                        <option value="Parent" ${row[i] === 'Parent' ? 'selected' : ''}>ولي أمر</option>
+                                        <option value="Admin" ${row[i] === 'Admin' ? 'selected' : ''}>إدارة</option>
+                                        <option value="Supervisor" ${row[i] === 'Supervisor' ? 'selected' : ''}>مشرف</option>
+                                    </select>
+                                    <div class="absolute left-3 top-3.5 text-gray-400 pointer-events-none"><i class="fas fa-chevron-down"></i></div>
+                                </div>
+                            `;
                     }
                     // 2. Allocations - Teacher (Col 1)
                     else if (type === 'Allocations' && i === 1) {
@@ -776,9 +914,19 @@
                     else if (type === 'Allocations' && i === 3) {
                         inputField = this.buildSelect(i, this.lookups.subjects, row[i]);
                     }
+                    // 5. Enrollments - Student (Col 1)
+                    else if (type === 'Enrollments' && i === 1) {
+                        inputField = this.buildSelect(i, this.lookups.students, row[i]);
+                    }
+                    // 6. Enrollments - Class (Col 2)
+                    else if (type === 'Enrollments' && i === 2) {
+                        inputField = this.buildSelect(i, this.lookups.classes, row[i]);
+                    }
                     // Default Text Input
                     else {
-                        inputField = `<input type="text" id="edit_f_${i}" value="${row[i]}" ${isReadOnly ? 'readonly class="bg-gray-100 text-gray-500 cursor-not-allowed w-full p-2 border rounded-lg"' : 'class="w-full p-2 border rounded-lg outline-none focus:border-emerald-500 transition"'} >`;
+                        inputField = isReadOnly ?
+                            `<div class="bg-gray-100 p-3 rounded-xl border border-gray-200 text-gray-500 font-mono text-sm select-all">${row[i]}</div><input type="hidden" id="edit_f_${i}" value="${row[i]}">` :
+                            `<input type="text" id="edit_f_${i}" value="${row[i]}" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition font-bold text-gray-700 placeholder-gray-300" placeholder="${h}">`;
                     }
 
                     // Show Arabic Label if available
@@ -786,7 +934,8 @@
                         'Users': ['المعرف', 'الاسم', 'الدور', 'الهاتف', 'كلمة المرور', 'نشط'],
                         'Classes': ['معرف الفصل', 'اسم الفصل', 'رقم الفصل'],
                         'Subjects': ['المعرف', 'اسم المادة', 'الاسم الانجليزي'],
-                        'Allocations': ['معرف التوزيع', 'المعلم', 'الفصل', 'المادة', 'السنة']
+                        'Allocations': ['معرف التوزيع', 'المعلم', 'الفصل', 'المادة', 'السنة'],
+                        'Enrollments': ['معرف القيد', 'الطالب', 'الفصل']
                     };
                     const label = (headerMap[type] && headerMap[type][i]) ? headerMap[type][i] : h;
 
@@ -795,16 +944,18 @@
                     // 2: English Name (Subjects - Auto)
                     // 4: Year (Allocations - Auto)
                     if (i === 0 || (type === 'Subjects' && i === 2) || (type === 'Allocations' && i === 4)) {
-                        return `<div style="display:none">${inputField}</div>`;
+                        return isReadOnly ? `<div class="hidden">${inputField}</div>` : ''; // Just hidden input for ID
                     }
 
                     return `
-                        <div>
-                            <label class="block text-gray-500 text-xs font-bold mb-1">${label}</label>
-                            ${inputField}
-                        </div>
-                     `;
-                }).join('');
+                            <div class="col-span-1">
+                                <label class="block text-gray-700 text-sm font-bold mb-2 ml-1">${label}</label>
+                                ${inputField}
+                            </div>
+                         `;
+                }).join('')}
+                    </div>
+                `;
 
                 document.getElementById('adminEditForm').innerHTML = formHtml;
                 document.getElementById('modal-admin-edit').classList.remove('hidden');
@@ -812,10 +963,13 @@
 
             buildSelect(idx, list, selectedVal) {
                 return `
-                    <select id="edit_f_${idx}" class="w-full p-2 border rounded-lg outline-none focus:border-emerald-500 bg-white" required>
-                        <option value="">-- اختر --</option>
-                        ${list.map(item => `<option value="${item.id}" ${String(item.id) === String(selectedVal) ? 'selected' : ''}>${item.displayName || item.name}</option>`).join('')}
-                    </select>
+                    <div class="relative">
+                        <select id="edit_f_${idx}" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-gray-700 font-bold" required>
+                            <option value="">-- اختر --</option>
+                            ${list.map(item => `<option value="${item.id}" ${String(item.id) === String(selectedVal) ? 'selected' : ''}>${item.displayName || item.name}</option>`).join('')}
+                        </select>
+                        <div class="absolute left-3 top-3.5 text-gray-400 pointer-events-none"><i class="fas fa-chevron-down"></i></div>
+                    </div>
                 `;
             },
 
@@ -1092,14 +1246,114 @@
                 };
 
                 // Render Teacher Log Form into adminLogArea
-                // We need to hijack Teacher module's container target temporarily or pass a target ID
-                // Refactoring Teacher.loadLogForm to accept target container.
-
-                // For now, let's just clear dashboard content and show the form full screen? 
-                // Better: Render in a modal or just replace the content area.
-                // Let's use the 'adminLogArea' div created above.
-
                 Teacher.loadLogForm(classObj, 'adminLogArea');
+            },
+
+            // --- BULK ACTIONS ---
+            toggleSelectAll(source) {
+                const checkboxes = document.querySelectorAll('.row-checkbox');
+                checkboxes.forEach(c => c.checked = source.checked);
+                this.updateSelection();
+            },
+
+            updateSelection() {
+                const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+                const count = checkboxes.length;
+                const bar = document.getElementById('bulkActionBar');
+
+                if (count > 0) {
+                    bar.classList.remove('hidden');
+                    document.getElementById('selectedCount').innerText = count;
+                } else {
+                    bar.classList.add('hidden');
+                    // Uncheck header if exists
+                    const headerChk = document.querySelector('thead input[type="checkbox"]');
+                    if (headerChk) headerChk.checked = false;
+                }
+            },
+
+            clearSelection() {
+                const checkboxes = document.querySelectorAll('.row-checkbox');
+                checkboxes.forEach(c => c.checked = false);
+                const headerChk = document.querySelector('thead input[type="checkbox"]');
+                if (headerChk) headerChk.checked = false;
+                this.updateSelection();
+            },
+
+            openBulkMove() {
+                const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+                const ids = Array.from(checkboxes).map(c => c.value);
+                if (ids.length === 0) return;
+
+                // Create Modal Dynamically
+                const modalParams = {
+                    title: `نقل ${ids.length} طالب`,
+                    content: `
+                        <div class="mb-4">
+                            <label class="block text-gray-500 text-sm font-bold mb-2">اختر الفصل الجديد</label>
+                            <select id="bulkNewClass" class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50 font-bold">
+                                <option value="">-- اختر الفصل --</option>
+                                ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName || c.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-yellow-800 text-sm mb-4">
+                            <i class="fas fa-exclamation-triangle ml-1"></i> سيتم نقل الطلاب المحددين فوراً.
+                        </div>
+                    `,
+                    onConfirm: () => Admin.confirmBulkMove(ids)
+                };
+
+                this.showDynamicModal(modalParams);
+            },
+
+            async confirmBulkMove(ids) {
+                const newClassId = document.getElementById('bulkNewClass').value;
+                if (!newClassId) return UI.showError("اختر الفصل الجديد");
+
+                UI.loader(true);
+                try {
+                    const res = await App.call('adminBulkUpdateEnrollments', { enrollmentIds: ids, newClassId });
+                    if (res.success) {
+                        UI.showError(res.message);
+                        this.closeDynamicModal();
+                        this.switchTab('Enrollments'); // Refresh
+                    } else {
+                        alert(res.message);
+                    }
+                } catch (e) { alert(e.message); }
+                UI.loader(false);
+            },
+
+            // Helper for dynamic modals (since we don't have a generic one yet, we'll quickly create one or reuse adminEdit)
+            // Let's create a temporary one or append to body
+            showDynamicModal(params) {
+                let m = document.getElementById('modal-dynamic');
+                if (!m) {
+                    m = document.createElement('div');
+                    m.id = 'modal-dynamic';
+                    m.className = "fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm fade-in";
+                    document.body.appendChild(m);
+                }
+
+                m.innerHTML = `
+                    <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 transform transition-all scale-100">
+                        <div class="flex justify-between items-center mb-4 border-b pb-2">
+                             <h3 class="font-bold text-lg">${params.title}</h3>
+                             <button onclick="document.getElementById('modal-dynamic').remove()" class="text-gray-400 hover:text-red-500"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div>${params.content}</div>
+                        <div class="mt-4 flex gap-3">
+                            <button id="btnDynamicConfirm" class="flex-1 bg-emerald-600 text-white py-2 rounded-xl font-bold hover:bg-emerald-700">تأكيد</button>
+                            <button onclick="document.getElementById('modal-dynamic').remove()" class="flex-1 bg-gray-100 text-gray-600 py-2 rounded-xl font-bold">إلغاء</button>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('btnDynamicConfirm').onclick = params.onConfirm;
+            },
+
+            closeDynamicModal() {
+                const m = document.getElementById('modal-dynamic');
+                if (m) m.remove();
             }
         };
 
@@ -1411,37 +1665,43 @@
 
                 if (!content && !hw) return alert("الرجاء كتابة محتوى الحصة أو الواجب");
 
-                UI.loader(true);
-                try {
-                    const res = await App.call('saveDailyLog', {
-                        teacherId: App.user.userId,
-                        classId: this.currentClass.classId,
-                        subjectId: this.currentClass.subjectId,
-                        date: new Date(),
-                        content,
-                        homework: hw,
-                        studentsStatus
-                    });
+                // OPTIMISTIC UI: Show success immediately
+                UI.showError("تم الحفظ بنجاح (جاري المزامنة...)", "green");
 
-                    if (res.success) {
-                        UI.showError("تم حفظ التقرير بنجاح");
-                        document.getElementById(this.currentTargetId).innerHTML = "";
+                // Clear Form immediately
+                document.getElementById('logContent').value = '';
+                document.getElementById('logHW').value = '';
+                // Reset Checkboxes (Default Checked/Present)
+                document.querySelectorAll('[id^="chk_"]').forEach(c => c.checked = true);
+                document.querySelectorAll('[id^="note_"]').forEach(n => n.value = '');
 
-                        // Reset Select if in Teacher Mode
-                        const sel = document.getElementById('teacherClassSelect');
-                        if (sel && !sel.classList.contains('hidden')) {
-                            const selectEl = sel.querySelector('select'); // The actual select inside the div
-                            if (selectEl) selectEl.value = "";
-                        }
-
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                    } else {
-                        alert(res.message);
+                // Send in background without blocking UI
+                App.call('saveDailyLog', {
+                    teacherId: App.user.userId,
+                    classId: this.currentClass.classId,
+                    subjectId: this.currentClass.subjectId,
+                    date: new Date(),
+                    content,
+                    homework: hw,
+                    studentsStatus
+                }).then(res => {
+                    if (!res.success) {
+                        alert("فشل الحفظ في الخلفية! يرجى المحاولة مرة أخرى: " + res.message);
                     }
-                } catch (e) { alert(e.message); }
-                UI.loader(false);
-            },
+                }).catch(e => {
+                    console.error(e);
+                    alert("خطأ في الشبكة أثناء الحفظ");
+                });
 
+                // Reset Select if in Teacher Mode
+                const sel = document.getElementById('teacherClassSelect');
+                if (sel && !sel.classList.contains('hidden')) {
+                    const selectEl = sel.querySelector('select');
+                    if (selectEl) selectEl.value = "";
+                }
+
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            },
         };
 
 
