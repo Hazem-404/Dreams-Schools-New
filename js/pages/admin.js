@@ -1679,7 +1679,7 @@ const Admin = {
                         </label>
                     </div>
                     <div class="grid grid-cols-2 gap-2 text-sm">
-                        ${this.lookups.teachers.map(t => `
+                        ${[...this.lookups.teachers].sort((a, b) => a.name.localeCompare(b.name, 'ar')).map(t => `
                             <label class="flex items-center gap-2 p-2 bg-white rounded border border-gray-100 cursor-pointer hover:border-blue-300 transition">
                                 <input type="checkbox" class="perm-check-teacher accent-blue-600 w-4 h-4" value="${t.id}" ${assignedTeachers.includes(String(t.id)) ? 'checked' : ''}>
                                 <span class="font-bold text-gray-700 select-none">${t.name}</span>
