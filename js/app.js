@@ -55,8 +55,8 @@ const App = {
         document.getElementById('dashRole').innerText = roleMap[this.user.role] || this.user.role;
 
         // 4. Load Role-Specific Content
-        if (this.user.role === 'Admin') Admin.init(false);
-        else if (this.user.role === 'Supervisor') Admin.init(true);
+        if (this.user.role === 'Admin') Admin.init();
+        else if (this.user.role === 'Supervisor') Moderator.init();
         else if (this.user.role === 'Teacher') Teacher.init();
         else if (this.user.role === 'Parent') Parent.init();
         else {

@@ -39,12 +39,13 @@ function importStudentsAndParents() {
   // We will only append NEW classes if they don't exist.
   // if (sheetClasses.getLastRow() > 1) { ... }
   
-  // Clear Users but KEEP Admin (if you want to reset fully)
-  if (sheetUsers.getLastRow() > 1) {
-    sheetUsers.getRange(2, 1, sheetUsers.getLastRow() - 1, sheetUsers.getLastColumn()).clear();
-  }
+  // --- 4. PRESERVE USERS (Teachers/Admins) ---
+  // We do NOT clear users anymore.
+  // if (sheetUsers.getLastRow() > 1) {
+  //   sheetUsers.getRange(2, 1, sheetUsers.getLastRow() - 1, sheetUsers.getLastColumn()).clear();
+  // }
 
-  // Restore Default Admin (Safety Net)
+  // Restore Default Admin (Only if strictly empty, but likely users exist now)
   const usersData = sheetUsers.getDataRange().getValues();
   if (usersData.length <= 1) { // No admin found
     sheetUsers.appendRow(["U_001", "System Admin", "admin", "01000000000", "123456", "TRUE", new Date()]);
@@ -65,14 +66,13 @@ function importStudentsAndParents() {
   const defaultPass = "123456";
 
   // Arrays for batch writing
-  const newClasses = [];
   const newUsers = [];
   const newStudents = [];
   const newEnrollments = [];
 
   // Temporary caches for newly created items
   const tempNewUsers = {};
-  const tempNewClasses = {};
+  // const tempNewClasses = {}; // No longer creating classes
 
   data.forEach(row => {
     // 0:Name, 1:Branch, 2:Grade, 3:Class, 4:DOB, 5:FatherName, 6:Job, 7:Phone, 8:Address
@@ -90,12 +90,14 @@ function importStudentsAndParents() {
 
     // --- Class ---
     const classKey = sGrade + "_" + sClassVal; 
-    let classId = existingClasses[classKey] || tempNewClasses[classKey];
+    // STRICT LOOKUP: Only use existing classes.
+    let classId = existingClasses[classKey]; 
     
     if (!classId) {
-      classId = "C_" + Math.floor(Math.random() * 1000000);
-      newClasses.push([classId, sClassVal, sGrade]);
-      tempNewClasses[classKey] = classId;
+      // Option: Skip or Log. User asked not to create classes.
+      // We will skip this student assignment to avoid broken links.
+      console.log(`Skipping student ${sName}: Class ${classKey} not found.`);
+      return; 
     }
 
     // --- Parent (User) ---
@@ -138,7 +140,7 @@ function importStudentsAndParents() {
   });
 
   // --- Batch Write to Sheets ---
-  if (newClasses.length > 0) appendData(sheetClasses, newClasses);
+  // if (newClasses.length > 0) appendData(sheetClasses, newClasses); // Disabled Class Creation
   if (newUsers.length > 0) appendData(sheetUsers, newUsers);
   if (newStudents.length > 0) appendData(sheetStudents, newStudents);
   if (newEnrollments.length > 0) appendData(sheetEnrollments, newEnrollments);

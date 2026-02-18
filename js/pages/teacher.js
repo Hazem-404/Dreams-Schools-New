@@ -17,27 +17,170 @@ const Teacher = {
             }
 
             this.classes = res.classes;
-
-            const html = `
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6" id="teacherClassSelect">
-                    <label class="block text-gray-500 text-sm font-bold mb-2">اختر الفصل / المادة</label>
-                    <div class="relative">
-                        <select onchange="Teacher.loadLogForm(this.value)" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none outline-none focus:ring-2 focus:ring-emerald-500 text-lg font-bold text-gray-700">
-                            <option value="">-- اضغط للاختيار --</option>
-                            ${res.classes.map((c, i) => `<option value="${i}">${c.className} - ${c.subjectName}</option>`).join('')}
-                        </select>
-                        <div class="absolute left-4 top-4 text-emerald-600 pointer-events-none"><i class="fas fa-chevron-down"></i></div>
-                    </div>
-                </div>
-
-                <div id="teacherWorkArea" class="min-h-[400px]"></div>
-            `;
-            document.getElementById('dashboardContent').innerHTML = html;
+            this.renderTabs();
         } catch (e) { UI.showError(e.message); }
         UI.loader(false);
     },
 
-    // switchTab(tab) { ... } // REMOVED
+    renderTabs() {
+        const html = `
+            <div class="flex justify-center mb-6 bg-white p-2 rounded-xl shadow-sm border border-gray-100 w-fit mx-auto">
+                <button onclick="Teacher.switchTab('Log')" id="tab_Log" class="px-6 py-2 rounded-lg font-bold text-sm transition ${this.currentTab === 'Log' ? 'bg-emerald-100 text-emerald-700' : 'text-gray-500 hover:bg-gray-50'}">
+                    <i class="fas fa-edit mr-2"></i>تسجيل حصة
+                </button>
+                <button onclick="Teacher.switchTab('History')" id="tab_History" class="px-6 py-2 rounded-lg font-bold text-sm transition ${this.currentTab === 'History' ? 'bg-emerald-100 text-emerald-700' : 'text-gray-500 hover:bg-gray-50'}">
+                    <i class="fas fa-history mr-2"></i>سجل الحصص
+                </button>
+            </div>
+            <div id="teacherContentArea"></div>
+        `;
+        document.getElementById('dashboardContent').innerHTML = html;
+        this.switchTab(this.currentTab);
+    },
+
+    switchTab(tab) {
+        this.currentTab = tab;
+        // Update Buttons
+        document.getElementById('tab_Log').className = `px-6 py-2 rounded-lg font-bold text-sm transition ${tab === 'Log' ? 'bg-emerald-100 text-emerald-700' : 'text-gray-500 hover:bg-gray-50'}`;
+        document.getElementById('tab_History').className = `px-6 py-2 rounded-lg font-bold text-sm transition ${tab === 'History' ? 'bg-emerald-100 text-emerald-700' : 'text-gray-500 hover:bg-gray-50'}`;
+
+        const content = document.getElementById('teacherContentArea');
+
+        if (tab === 'Log') {
+            this.renderLogInterface(content);
+        } else {
+            this.renderHistory(content);
+        }
+    },
+
+    renderLogInterface(container) {
+        container.innerHTML = `
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6" id="teacherClassSelect">
+                <label class="block text-gray-500 text-sm font-bold mb-2">اختر الفصل / المادة</label>
+                <div class="relative">
+                    <select onchange="Teacher.loadLogForm(this.value)" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none outline-none focus:ring-2 focus:ring-emerald-500 text-lg font-bold text-gray-700">
+                        <option value="">-- اضغط للاختيار --</option>
+                        ${this.classes.map((c, i) => `<option value="${i}">${c.className} - ${c.subjectName}</option>`).join('')}
+                    </select>
+                    <div class="absolute left-4 top-4 text-emerald-600 pointer-events-none"><i class="fas fa-chevron-down"></i></div>
+                </div>
+            </div>
+            <div id="teacherWorkArea" class="min-h-[400px]"></div>
+        `;
+    },
+
+    async renderHistory(container) {
+        container.innerHTML = '<div class="spinner mx-auto mt-10"></div>';
+        try {
+            const res = await App.call('getTeacherLogHistory', { userId: App.user.userId });
+            if (!res.success) throw new Error(res.message);
+
+            if (res.history.length === 0) {
+                container.innerHTML = '<div class="text-center p-10 text-gray-400 font-bold">لا توجد سجلات سابقة</div>';
+                return;
+            }
+
+            const html = `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-right min-w-[600px]">
+                        <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-bold">
+                            <tr>
+                                <th class="p-4">التاريخ</th>
+                                <th class="p-4">الفصل / المادة</th>
+                                <th class="p-4">المحتوى</th>
+                                <th class="p-4">الحالة</th>
+                                <th class="p-4">الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            ${res.history.map(row => {
+                let statusColor = 'bg-gray-100 text-gray-600';
+                let statusText = row.status;
+
+                if (row.status === 'Approved') { statusColor = 'bg-emerald-100 text-emerald-700'; statusText = 'مقبول'; }
+                else if (row.status === 'Pending') { statusColor = 'bg-yellow-100 text-yellow-700'; statusText = 'قيد المراجعة'; }
+                else if (row.status === 'Rejected') { statusColor = 'bg-red-100 text-red-700'; statusText = 'مرفوض'; }
+
+                return `
+                                <tr class="hover:bg-gray-50 transition">
+                                    <td class="p-4 font-bold text-gray-700 whitespace-nowrap">${row.date}</td>
+                                    <td class="p-4">
+                                        <div class="font-bold text-gray-800">${row.className}</div>
+                                        <div class="text-xs text-gray-500">${row.subjectName}</div>
+                                    </td>
+                                    <td class="p-4 text-sm text-gray-600 max-w-xs truncate" title="${row.content || ''}">${row.content || '-'}</td>
+                                    <td class="p-4">
+                                        <div class="flex flex-col gap-1">
+                                            <span class="${statusColor} px-3 py-1 rounded-full text-xs font-bold shadow-sm border border-opacity-10 w-fit">
+                                                ${statusText}
+                                            </span>
+                                            ${row.supervisorNote ? `<span class="text-purple-600 text-xs font-bold bg-purple-50 px-2 py-1 rounded border border-purple-100" title="ملاحظة المشرف">🔔 ${row.supervisorNote}</span>` : ''}
+                                        </div>
+                                    </td>
+                                    <td class="p-4">
+                                        ${row.status === 'Pending' ? `
+                                            <button onclick='Teacher.editLog(${JSON.stringify(row)})' class="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition" title="تعديل">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        ` : ''}
+                                    </td>
+                                </tr>
+                                `;
+            }).join('')}
+                        </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        } catch (e) {
+            container.innerHTML = `<div class="text-red-500 text-center p-10">${e.message}</div>`;
+        }
+    },
+
+    // Switch to Edit Mode
+    async editLog(log) {
+        // 1. Switch Tab
+        this.switchTab('Log');
+
+        // 2. Load Form for this Class
+        // Find Class Index by ID (Robust)
+        const classIdx = this.classes.findIndex(c => String(c.classId) === String(log.classId) && String(c.subjectId) === String(log.subjectId));
+        if (classIdx === -1) return alert("الفصل غير موجود: ربما تم تغيير الجدول؟");
+
+        // Set Select Value
+        setTimeout(() => {
+            const sel = document.querySelector('#teacherClassSelect select');
+            if (sel) {
+                sel.value = classIdx;
+                sel.dispatchEvent(new Event('change'));
+
+                // 3. Wait for Form Load then Fill
+                // We use a one-time listener or just a delay for simplicity in this architecture
+                const checkExist = setInterval(() => {
+                    if (document.getElementById('logContent')) {
+                        clearInterval(checkExist);
+
+                        // Fill Data
+                        document.getElementById('logDate').value = log.date;
+                        document.getElementById('logContent').value = log.content || '';
+                        // Note: log.homework is not always returned in history summary unless we added it?
+                        // We did NOT add 'homework' to getTeacherLogHistory. 
+                        // Either we add it now, or we re-fetch 'getAdminActivity' for that date.
+                        // Re-fetching is safer and gets ATTENDANCE too.
+
+                        // Trigger Date Change to load details (Attendance & Homework)
+                        Teacher.loadLogForDate();
+
+                        // Set Edit ID
+                        Teacher.editingLogId = log.id;
+                        UI.showError("جاري تعديل سجل: " + log.date, "blue");
+                    }
+                }, 500);
+            }
+        }, 100);
+    },
 
     async loadLogForm(idxOrObj, targetId = 'teacherWorkArea') {
         // Determine Mode: Teacher (Index) or Admin (Object)
@@ -212,7 +355,7 @@ const Teacher = {
         document.querySelectorAll('[id^="note_"]').forEach(n => n.value = '');
 
         // Send in background without blocking UI
-        App.call('saveDailyLog', {
+        const payload = {
             teacherId: App.user.userId,
             classId: this.currentClass.classId,
             subjectId: this.currentClass.subjectId,
@@ -220,9 +363,20 @@ const Teacher = {
             content,
             homework: hw,
             studentsStatus
-        }).then(res => {
+        };
+
+        if (this.editingLogId) {
+            payload.logId = this.editingLogId;
+        }
+
+        App.call('saveDailyLog', payload).then(res => {
             if (!res.success) {
                 alert("فشل الحفظ في الخلفية! يرجى المحاولة مرة أخرى: " + res.message);
+            } else {
+                if (this.editingLogId) {
+                    this.editingLogId = null; // Clear Edit Mode
+                    UI.showError("تم تحديث السجل بنجاح", "green");
+                }
             }
         }).catch(e => {
             console.error(e);
