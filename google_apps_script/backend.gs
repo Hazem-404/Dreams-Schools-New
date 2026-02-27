@@ -137,22 +137,18 @@ function getDashboardData(userId, role, phone) {
   if (role !== "Parent") return { success: false, message: "Invalid Role" };
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // 1. Load Classes Map
+  // 1. Batch Load: read all needed sheets up front
   const classMap = {};
   ss.getSheetByName("Classes").getDataRange().getValues().forEach(r => classMap[r[0]] = r[1]);
   
-  // 2. Load Student Allocations (Enrollments)
-  const studClassMap = {};
-  ss.getSheetByName("Enrollments").getDataRange().getValues().forEach(r => studClassMap[r[1]] = classMap[r[2]]);
-
-  // 3. Find Children by Phone
-  const studs = ss.getSheetByName("Students").getDataRange().getValues();
-  const enrolls = ss.getSheetByName("Enrollments").getDataRange().getValues();
-  // Map StudentID -> ClassID
+  // 2. Load Enrollments once, build two maps from it
+  const enrollData = ss.getSheetByName("Enrollments").getDataRange().getValues();
   const studToClassId = {};
-  enrolls.forEach(r => studToClassId[r[1]] = r[2]);
-  
-  // 4. Load Warnings
+  enrollData.forEach(r => studToClassId[r[1]] = r[2]);
+    
+  // 3. Find Children by Phone (using already-loaded data)
+  const studs = ss.getSheetByName("Students").getDataRange().getValues();
+
   const warnSheet = ss.getSheetByName("Warnings");
   const warnData = warnSheet ? warnSheet.getDataRange().getValues() : [];
   const warnMap = {}; // StudentID -> Count
@@ -573,13 +569,13 @@ function getTeacherLogHistory(userId) {
 // 4. ADMIN MODULE (FULL CRUD)
 // ==========================================
 
-// CACHED VERSION
+// CACHED VERSION - 30 minute cache for lookups (invalidated on writes via _invalidateCache)
 function getAdminLookupsCached() {
-  // Disable cache during development/setup to ensure deleted items disappear
-  // const cached = _getFromCache("admin_lookups");
-  // if (cached) return cached;
-  
-  return getAdminLookups();
+  const cached = _getFromCache("admin_lookups_v2");
+  if (cached) return cached;
+  const res = getAdminLookups();
+  _saveToCache("admin_lookups_v2", res, 1800); // 30 minutes
+  return res;
 }
 
 function getAdminLookups() {
@@ -1065,6 +1061,9 @@ function archiveOldLogs() {
  * Returns all students with their enrollment and parent details
  */
 function getStudentsManagement() {
+  const cached = _getFromCache("stud_mgmt");
+  if (cached) return cached;
+  
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const studentsSheet = ss.getSheetByName("Students");
@@ -1118,7 +1117,9 @@ function getStudentsManagement() {
       });
     }
     
-    return { success: true, students: students };
+    const res = { success: true, students: students };
+    _saveToCache("stud_mgmt", res, 300); // 5 minutes
+    return res;
   } catch (e) {
     return { success: false, message: "Error: " + e.toString() };
   }
@@ -1129,6 +1130,9 @@ function getStudentsManagement() {
  * Aggregates students by parent phone number
  */
 function getParentsManagement() {
+  const cached = _getFromCache("par_mgmt");
+  if (cached) return cached;
+  
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const studentsSheet = ss.getSheetByName("Students");
@@ -1139,10 +1143,10 @@ function getParentsManagement() {
     const studentsData = studentsSheet.getDataRange().getValues();
     const usersData = usersSheet ? usersSheet.getDataRange().getValues() : [];
     
-    // Build parent name map: phone -> name
+    // Build parent name map: phone -> name  
     const parentNameMap = {};
     for (let i = 1; i < usersData.length; i++) {
-      if (usersData[i][2] === "Parent") { // Role column
+      if (usersData[i][2] === "Parent") {
         const phone = normalizePhone(usersData[i][3]);
         const name = usersData[i][1];
         parentNameMap[phone] = name;
@@ -1173,10 +1177,10 @@ function getParentsManagement() {
       }
     }
     
-    // Convert to array
     const parents = Object.values(parentStudentsMap);
-    
-    return { success: true, parents: parents };
+    const res = { success: true, parents: parents };
+    _saveToCache("par_mgmt", res, 300); // 5 minutes
+    return res;
   } catch (e) {
     return { success: false, message: "Error: " + e.toString() };
   }
@@ -1198,9 +1202,9 @@ function updateStudent(studentId, name, parentPhone) {
     
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(studentId)) {
-        // Update: [ID, Name, ParentPhone]
-        sheet.getRange(i + 1, 2).setValue(name); // Name
-        sheet.getRange(i + 1, 3).setValue(parentPhone || ""); // ParentPhone
+        sheet.getRange(i + 1, 2).setValue(name);
+        if (parentPhone !== undefined) sheet.getRange(i + 1, 3).setValue(parentPhone || "");
+        _invalidateDataCaches();
         return { success: true, message: "تم تحديث بيانات الطالب بنجاح" };
       }
     }
@@ -1217,15 +1221,12 @@ function updateStudent(studentId, name, parentPhone) {
  */
 function deleteStudent(studentId) {
   try {
-    if (!studentId) {
-      return { success: false, message: "Student ID is required" };
-    }
+    if (!studentId) return { success: false, message: "Student ID is required" };
     
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const studentsSheet = ss.getSheetByName("Students");
     const enrollmentsSheet = ss.getSheetByName("Enrollments");
     
-    // Delete from Students sheet
     const studentsData = studentsSheet.getDataRange().getValues();
     let studentFound = false;
     for (let i = 1; i < studentsData.length; i++) {
@@ -1236,21 +1237,19 @@ function deleteStudent(studentId) {
       }
     }
     
-    if (!studentFound) {
-      return { success: false, message: "الطالب غير موجود" };
-    }
+    if (!studentFound) return { success: false, message: "الطالب غير موجود" };
     
     // Cascade delete from Enrollments
     if (enrollmentsSheet) {
       const enrollmentsData = enrollmentsSheet.getDataRange().getValues();
-      // Delete in reverse to avoid index shifting issues
       for (let i = enrollmentsData.length - 1; i >= 1; i--) {
-        if (String(enrollmentsData[i][1]) === String(studentId)) { // StudentID column
+        if (String(enrollmentsData[i][1]) === String(studentId)) {
           enrollmentsSheet.deleteRow(i + 1);
         }
       }
     }
     
+    _invalidateDataCaches();
     return { success: true, message: "تم حذف الطالب بنجاح" };
   } catch (e) {
     return { success: false, message: "Error: " + e.toString() };
@@ -1271,26 +1270,22 @@ function linkParentToStudent(studentId, parentPhone) {
     const studentsSheet = ss.getSheetByName("Students");
     const usersSheet = ss.getSheetByName("Users");
     
-    // Update student's parent phone
     const studentsData = studentsSheet.getDataRange().getValues();
     let studentFound = false;
     for (let i = 1; i < studentsData.length; i++) {
       if (String(studentsData[i][0]) === String(studentId)) {
-        studentsSheet.getRange(i + 1, 3).setValue(parentPhone); // ParentPhone column
+        studentsSheet.getRange(i + 1, 3).setValue(parentPhone);
         studentFound = true;
         break;
       }
     }
     
-    if (!studentFound) {
-      return { success: false, message: "الطالب غير موجود" };
-    }
+    if (!studentFound) return { success: false, message: "الطالب غير موجود" };
     
     // Check if parent user exists, if not create one
     const normalizedPhone = normalizePhone(parentPhone);
     const usersData = usersSheet.getDataRange().getValues();
     let parentExists = false;
-    
     for (let i = 1; i < usersData.length; i++) {
       if (normalizePhone(usersData[i][3]) === normalizedPhone) {
         parentExists = true;
@@ -1299,12 +1294,11 @@ function linkParentToStudent(studentId, parentPhone) {
     }
     
     if (!parentExists) {
-      // Create new parent user
       const newParentId = "U_" + Date.now();
-      const defaultPassword = "123456"; // Default password
-      usersSheet.appendRow([newParentId, "ولي أمر", "Parent", parentPhone, defaultPassword, "Yes"]);
+      usersSheet.appendRow([newParentId, "ولي أمر", "Parent", parentPhone, "123456", "Yes"]);
     }
     
+    _invalidateDataCaches();
     return { success: true, message: "تم ربط ولي الأمر بالطالب بنجاح" };
   } catch (e) {
     return { success: false, message: "Error: " + e.toString() };
@@ -1372,7 +1366,6 @@ function updateParent(currentPhone, newName, newPhone, newPassword) {
     const normalizedCurrent = normalizePhone(currentPhone);
     const normalizedNew = normalizePhone(newPhone);
     
-    // Check if new phone exists (if changed)
     if (normalizedCurrent !== normalizedNew) {
        for (let i = 1; i < data.length; i++) {
          if (normalizePhone(data[i][3]) === normalizedNew && data[i][2] === 'Parent') {
@@ -1384,17 +1377,12 @@ function updateParent(currentPhone, newName, newPhone, newPassword) {
     let parentFound = false;
     for (let i = 1; i < data.length; i++) {
       if (normalizePhone(data[i][3]) === normalizedCurrent && data[i][2] === 'Parent') {
-        // Found Parent. Update: Name (1), Phone (3)
-        // Users Schema: [ID, Name, Role, Phone, Password, Active]
         sheet.getRange(i + 1, 2).setValue(newName);
         sheet.getRange(i + 1, 4).setValue(newPhone);
-        
         if (newPassword && newPassword.trim() !== "") {
            sheet.getRange(i + 1, 5).setValue(newPassword);
         }
         
-        // Also update Linked Students if phone changed? 
-        // Logic: Students table links via 'ParentPhone'. If we change Parent Phone, we MUST update students too.
         if (normalizedCurrent !== normalizedNew) {
            const studSheet = ss.getSheetByName("Students");
            const studs = studSheet.getDataRange().getValues();
@@ -1404,7 +1392,6 @@ function updateParent(currentPhone, newName, newPhone, newPassword) {
               }
            }
         }
-        
         parentFound = true;
         break;
       }
@@ -1412,6 +1399,7 @@ function updateParent(currentPhone, newName, newPhone, newPassword) {
     
     if (!parentFound) return { success: false, message: "ولي الأمر غير موجود" };
     
+    _invalidateDataCaches();
     return { success: true, message: "تم تحديث بيانات ولي الأمر بنجاح" };
   } catch (e) {
     return { success: false, message: "Error: " + e.toString() };
@@ -1467,6 +1455,24 @@ function _getFromCache(key) {
     console.error("Cache Get Error", e);
   }
   return null;
+}
+
+/**
+ * Invalidate data caches after write operations.
+ * Call this after any function that modifies Students, Users, Enrollments, or Permissions.
+ */
+function _invalidateDataCaches() {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.removeAll([
+      "stud_mgmt",
+      "par_mgmt",
+      "admin_stats",
+      "admin_lookups_v2"
+    ]);
+  } catch (e) {
+    console.error("Cache Invalidation Error", e);
+  }
 }
 
 // ==========================================
@@ -1605,41 +1611,39 @@ function saveSupervisorPermissions(userId, permissions) {
 }
 
 function getSupervisorData(userId) {
-  // 1. Get Permissions
+  // 1. Get Permissions (includes module permissions too)
   const pRes = getSupervisorPermissions(userId);
   const perms = pRes.permissions || [];
   
   const classIds = perms.filter(p => p.type === 'Class').map(p => String(p.targetId));
   const teacherIds = perms.filter(p => p.type === 'Teacher').map(p => String(p.targetId));
   
-  // 2. Fetch Lookups (Classes, Teachers, Subjects)
+  // 2. Batch Fetch: read all sheets at once
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // Classes
   const classSheet = ss.getSheetByName("Classes");
+  const userSheet = ss.getSheetByName("Users");
+  const subSheet = ss.getSheetByName("Subjects");
+  
   const allClasses = classSheet ? classSheet.getDataRange().getValues().slice(1)
     .map(r => ({ id: r[0], name: r[1], number: r[2] })) : [];
     
-  // Teachers
-  const userSheet = ss.getSheetByName("Users");
   const allTeachers = userSheet ? userSheet.getDataRange().getValues().slice(1)
     .filter(r => r[2] === 'Teacher')
     .map(r => ({ id: r[0], name: r[1] })) : [];
     
-  // Subjects (All)
-  const subSheet = ss.getSheetByName("Subjects");
   const subjects = subSheet ? subSheet.getDataRange().getValues().slice(1)
     .map(r => ({ id: r[0], name: r[1] })) : [];
 
-  // Filter
-  const myClasses = allClasses.filter(c => classIds.includes(String(c.id)));
-  const myTeachers = allTeachers.filter(t => teacherIds.includes(String(t.id)));
+  // Filter to assigned only
+  const myClasses = classIds.length > 0 ? allClasses.filter(c => classIds.includes(String(c.id))) : allClasses;
+  const myTeachers = teacherIds.length > 0 ? allTeachers.filter(t => teacherIds.includes(String(t.id))) : allTeachers;
   
   return {
     success: true,
     classes: myClasses,
     teachers: myTeachers,
     subjects: subjects,
+    permissions: perms, // ← Return ALL permissions (including Module type) for frontend use
     stats: {
         classes: myClasses.length,
         teachers: myTeachers.length

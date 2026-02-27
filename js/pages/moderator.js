@@ -21,6 +21,13 @@ const Moderator = {
                 this.lookups.classes.forEach(c => c.displayName = `${c.name} ${c.number ? '- ' + c.number : ''}`);
                 this.lookups.teachers.forEach(t => t.name = UI.formatName(t.name));
 
+                // Extract module permissions
+                // permissions array: [{ type: 'Module', targetId: 'module_supervision' }, ...]
+                const allPerms = res.permissions || [];
+                const modulePerms = allPerms.filter(p => p.type === 'Module').map(p => p.targetId);
+                // If no module permissions saved, allow all (backward compatible)
+                this.allowedModules = modulePerms.length > 0 ? modulePerms : ['module_supervision', 'module_academic', 'module_people'];
+
                 // Render Dashboard
                 this.renderDashboard();
             } else {
@@ -35,30 +42,49 @@ const Moderator = {
 
     renderDashboard() {
         const content = document.getElementById('dashboardContent');
+        const allowed = this.allowedModules || ['module_supervision', 'module_academic', 'module_people'];
 
-        // Show Tabs specific to Moderator
+        // Build tabs dynamically based on module access
+        // Monitoring & Reviews → module_supervision
+        // Allocations → module_academic
+        // ClassControl → module_supervision
+        const tabs = [];
+        if (allowed.includes('module_supervision')) {
+            tabs.push(`<button onclick="Moderator.switchTab('Monitoring')" class="tab-btn bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold shadow-md transition" data-tab="Monitoring">
+                <i class="fas fa-chart-bar ml-2"></i>المتابعة اليومية
+            </button>`);
+            tabs.push(`<button onclick="Moderator.switchTab('Reviews')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="Reviews">
+                <i class="fas fa-check-double ml-2"></i>مراجعة السجلات
+            </button>`);
+            tabs.push(`<button onclick="Moderator.switchTab('ClassControl')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="ClassControl">
+                <i class="fas fa-edit ml-2"></i>تسجيل الحصص
+            </button>`);
+        }
+        if (allowed.includes('module_academic')) {
+            tabs.push(`<button onclick="Moderator.switchTab('Allocations')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="Allocations">
+                <i class="fas fa-chalkboard-teacher ml-2"></i>توزيع المدرسين
+            </button>`);
+        }
+
+        if (tabs.length === 0) {
+            content.innerHTML = `<div class="p-10 text-center text-gray-400"><i class="fas fa-lock text-4xl mb-4 opacity-30 block"></i><p class="font-bold">ليس لديك صلاحية الوصول لأي قسم حالياً.</p><p class="text-sm mt-1">تواصل مع المدير لتفعيل صلاحياتك.</p></div>`;
+            return;
+        }
+
         const html = `
             <!-- Tabs -->
             <div class="flex flex-wrap gap-2 mb-6 border-b pb-2">
-                <button onclick="Moderator.switchTab('Monitoring')" class="tab-btn bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold shadow-md transition" data-tab="Monitoring">
-                    <i class="fas fa-chart-bar ml-2"></i>المتابعة اليومية
-                </button>
-                <button onclick="Moderator.switchTab('Reviews')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="Reviews">
-                    <i class="fas fa-check-double ml-2"></i>مراجعة السجلات
-                </button>
-                <button onclick="Moderator.switchTab('Allocations')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="Allocations">
-                    <i class="fas fa-chalkboard-teacher ml-2"></i>توزيع المدرسين
-                </button>
-                <button onclick="Moderator.switchTab('ClassControl')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="ClassControl">
-                    <i class="fas fa-edit ml-2"></i>تسجيل الحصص
-                </button>
+                ${tabs.join('')}
             </div>
 
             <!-- Content Area -->
             <div id="modContent"></div>
         `;
         content.innerHTML = html;
-        this.switchTab('Monitoring');
+
+        // Switch to first available tab
+        const firstTab = document.querySelector('.tab-btn[data-tab]');
+        if (firstTab) this.switchTab(firstTab.dataset.tab);
     },
 
     switchTab(tab) {

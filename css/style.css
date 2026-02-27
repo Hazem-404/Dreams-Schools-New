@@ -107,3 +107,36 @@ body {
     transform: scale(0.95);
     transition: all 0.2s;
 }
+
+/* =============================================
+   LOGO GLOW EFFECT — Login Page
+   ============================================= */
+
+/* Static logo with pulsing outer glow only */
+.logo-3d {
+    animation: logo-glow-pulse 2.8s ease-in-out infinite;
+    display: block;
+}
+
+@keyframes logo-glow-pulse {
+
+    0%,
+    100% {
+        filter:
+            drop-shadow(0 0 6px rgba(125, 211, 252, 0.5)) drop-shadow(0 0 16px rgba(125, 211, 252, 0.2)) drop-shadow(0 4px 10px rgba(0, 0, 0, 0.12));
+    }
+
+    50% {
+        filter:
+            drop-shadow(0 0 16px rgba(125, 211, 252, 0.85)) drop-shadow(0 0 36px rgba(125, 211, 252, 0.4)) drop-shadow(0 6px 14px rgba(0, 0, 0, 0.15));
+    }
+}
+
+/* Empty wrappers — kept for HTML compatibility but do nothing */
+.logo-3d-wrapper {
+    display: inline-block;
+}
+
+.logo-glow {
+    display: none;
+}

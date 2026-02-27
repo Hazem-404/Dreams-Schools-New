@@ -1,7 +1,8 @@
 const Admin = {
     currentTab: 'Stats',
     // isSupervisor removed
-    cache: {},
+    cache: {},          // Tab-level data cache: { key: { data, ts } }
+    _cacheMs: 180000,   // 3 minutes client-side cache TTL
     lookups: { teachers: [], classes: [], subjects: [], students: [] },
 
     async init() {
@@ -64,33 +65,48 @@ const Admin = {
         if (tab === 'Monitoring') return this.renderMonitoring();
         if (tab === 'Reviews') return this.renderReviews();
         if (tab === 'ClassControl') return this.renderClassControl();
-        if (tab === 'Warnings') return this.renderWarnings(); // New Warning Tab
+        if (tab === 'Warnings') return this.renderWarnings();
         if (tab === 'StudentsManagement') return this.renderStudentsManagement();
         if (tab === 'ParentsManagement') return this.renderParentsManagement();
 
-        // Load Data Table
+        // Load Data Table with client-side cache
         try {
+            const cacheKey = 'tab_' + tab;
+            const now = Date.now();
             let res;
-            try {
-                res = await App.call('adminGetData', { type: tab });
-                if (!res.success) throw new Error(res.message);
-            } catch (err) {
-                console.warn("Backend unavailable, returning empty list", err);
-                // Mock Data Fallback for Tables
-                res = { success: true, header: ['Info'], data: [['Backend Not Deployed']] };
-                if (tab === 'Subjects') res.header = ['المعرف', 'اسم المادة'], res.data = [];
-                if (tab === 'Users') res.header = ['المعرف', 'الاسم', 'الدور', 'الهاتف', 'كلمة المرور', 'نشط'], res.data = [];
+
+            if (this.cache[cacheKey] && (now - this.cache[cacheKey].ts) < this._cacheMs) {
+                res = this.cache[cacheKey].data;
+            } else {
+                try {
+                    res = await App.call('adminGetData', { type: tab });
+                    if (!res.success) throw new Error(res.message);
+                    this.cache[cacheKey] = { data: res, ts: now };
+                } catch (err) {
+                    console.warn("Backend unavailable, returning empty list", err);
+                    res = { success: true, header: ['Info'], data: [['Backend Not Deployed']] };
+                    if (tab === 'Subjects') res.header = ['المعرف', 'اسم المادة'], res.data = [];
+                    if (tab === 'Users') res.header = ['المعرف', 'الاسم', 'الدور', 'الهاتف', 'كلمة المرور', 'نشط'], res.data = [];
+                }
             }
 
             this.allData = res.data || [];
             this.currentHeader = res.header;
 
-            // Render Filters & Table
             this.renderFilters(tab);
             this.applyFilters();
 
         } catch (e) {
             content.innerHTML = `<div class="bg-red-100 text-red-600 p-4 rounded-xl text-center">${e.message}</div>`;
+        }
+    },
+
+    // Clear specific or all client-side caches (call after write operations)
+    _clearAdminCache(key = null) {
+        if (key) {
+            delete this.cache[key];
+        } else {
+            this.cache = {}; // Nuclear: clear all
         }
     },
 
@@ -203,32 +219,49 @@ const Admin = {
                 if (!res.success) throw new Error(res.message);
             } catch (err) {
                 console.warn("Backend unavailable, using mock data", err);
-                res = { success: true, stats: { students: 0, teachers: 0, parents: 0, classes: 0 } };
+                res = { success: true, stats: { students: 0, teachers: 0, parents: 0, classes: 0, enrollments: 0 } };
             }
+
+            const now = new Date().toLocaleString('ar-EG');
+            const s = res.stats;
 
             const html = `
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <div class="text-slate-500 text-xs font-bold mb-1">الطلاب</div>
-                        <div class="text-3xl font-bold text-emerald-600">${res.stats.students}</div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1">
+                        <div class="flex items-center justify-between">
+                            <div class="text-slate-500 text-xs font-bold">الطلاب</div>
+                            <div class="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center"><i class="fas fa-user-graduate text-emerald-500 text-xs"></i></div>
+                        </div>
+                        <div class="text-3xl font-bold text-emerald-600">${s.students || 0}</div>
+                        ${s.enrollments != null ? `<div class="text-xs text-gray-400">${s.enrollments} قيد في الفصول</div>` : ''}
                     </div>
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <div class="text-slate-500 text-xs font-bold mb-1">المعلمين</div>
-                        <div class="text-3xl font-bold text-blue-600">${res.stats.teachers}</div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1">
+                        <div class="flex items-center justify-between">
+                            <div class="text-slate-500 text-xs font-bold">المعلمين</div>
+                            <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center"><i class="fas fa-chalkboard-teacher text-blue-500 text-xs"></i></div>
+                        </div>
+                        <div class="text-3xl font-bold text-blue-600">${s.teachers || 0}</div>
                     </div>
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <div class="text-slate-500 text-xs font-bold mb-1">أولياء الأمور</div>
-                        <div class="text-3xl font-bold text-orange-600">${res.stats.parents || 0}</div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1">
+                        <div class="flex items-center justify-between">
+                            <div class="text-slate-500 text-xs font-bold">أولياء الأمور</div>
+                            <div class="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center"><i class="fas fa-user-friends text-orange-500 text-xs"></i></div>
+                        </div>
+                        <div class="text-3xl font-bold text-orange-600">${s.parents || 0}</div>
                     </div>
-                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                        <div class="text-slate-500 text-xs font-bold mb-1">الفصول</div>
-                        <div class="text-3xl font-bold text-purple-600">${res.stats.classes}</div>
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-1">
+                        <div class="flex items-center justify-between">
+                            <div class="text-slate-500 text-xs font-bold">الفصول</div>
+                            <div class="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center"><i class="fas fa-chalkboard text-purple-500 text-xs"></i></div>
+                        </div>
+                        <div class="text-3xl font-bold text-purple-600">${s.classes || 0}</div>
                     </div>
                 </div>
-                
+
                 <div class="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-6 text-white mb-6">
                     <h3 class="font-bold text-lg mb-2">مرحباً بك في لوحة التحكم</h3>
                     <p class="opacity-90 text-sm">استخدم علامات التبويب في الأعلى لإدارة النظام، أو انتقل إلى تبويب "المتابعة" لمراقبة سير العملية التعليمية.</p>
+                    <p class="text-emerald-100 text-xs mt-3 border-t border-white/20 pt-2"><i class="fas fa-clock ml-1"></i>آخر تحديث: ${now}</p>
                 </div>
              `;
             document.getElementById('dashboardContent').innerHTML = html;
@@ -460,6 +493,7 @@ const Admin = {
             if (res.success) {
                 UI.showError("تم الحفظ بنجاح");
                 this.closeEdit();
+                this._clearAdminCache('tab_' + type); // Invalidate this tab's cache
                 this.switchTab(type); // Reload UI
             } else {
                 alert(res.message);
@@ -481,6 +515,7 @@ const Admin = {
                     const l = await App.call('getAdminLookups');
                     if (l.success) this.lookups = l;
                 }
+                this._clearAdminCache('tab_' + type); // Invalidate this tab's cache
                 this.switchTab(type);
             } else {
                 alert(res.message);
@@ -1138,7 +1173,7 @@ const Admin = {
      */
     openStudentEditModal(studentId, studentName, parentPhone) {
         const modalParams = {
-            title: `تعديل بيانات الطالب`,
+            title: `تعديل اسم الطالب`,
             content: `
                 <div class="space-y-4">
                     <div>
@@ -1146,11 +1181,9 @@ const Admin = {
                         <input type="text" id="editStudentName" value="${studentName}" 
                             class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold">
                     </div>
-                    <div>
-                        <label class="block text-gray-700 font-bold mb-2">رقم هاتف ولي الأمر</label>
-                        <input type="tel" id="editStudentParentPhone" value="${parentPhone}" 
-                            class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold" 
-                            placeholder="اختياري">
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-700">
+                        <i class="fas fa-info-circle ml-1"></i>
+                        لتغيير ولي الأمر المرتبط، استخدم زر <strong>ربط ولي الأمر</strong> <i class="fas fa-user-tie"></i> بجانب الطالب.
                     </div>
                 </div>
             `,
@@ -1161,13 +1194,12 @@ const Admin = {
 
     async saveStudentEdit(studentId) {
         const name = document.getElementById('editStudentName').value.trim();
-        const parentPhone = document.getElementById('editStudentParentPhone').value.trim();
 
         if (!name) return UI.showError("الرجاء إدخال اسم الطالب");
 
         UI.loader(true);
         try {
-            const res = await App.call('updateStudent', { studentId, name, parentPhone });
+            const res = await App.call('updateStudent', { studentId, name });
             if (res.success) {
                 UI.showError(res.message);
                 this.closeDynamicModal();
@@ -1199,12 +1231,41 @@ const Admin = {
     },
 
     /**
+     * Build filtered parent list HTML for the search modal
+     */
+    _buildParentSearchResults(parents, query) {
+        const q = (query || '').trim().toLowerCase();
+        const filtered = q ? parents.filter(p => p.name.toLowerCase().includes(q) || p.phone.includes(q)) : parents;
+        if (!filtered.length) return `<div class="text-center text-gray-400 text-xs py-3">لا توجد نتائج</div>`;
+        return filtered.map(p => `
+            <div onclick="Admin._selectParent('${p.phone}', '${p.name}')"
+                class="flex items-center gap-3 p-3 hover:bg-emerald-50 cursor-pointer border-b border-gray-50 transition rounded-lg group">
+                <div class="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm flexshrink-0">${p.name[0]}</div>
+                <div>
+                    <p class="font-bold text-gray-800 text-sm">${UI.formatName(p.name)}</p>
+                    <p class="text-xs text-gray-500 font-mono">${p.phone}</p>
+                </div>
+                <i class="fas fa-check-circle text-emerald-500 mr-auto hidden group-hover:block"></i>
+            </div>
+        `).join('');
+    },
+
+    _selectParent(phone, name) {
+        document.getElementById('selectedParentPhone').value = phone;
+        document.getElementById('selectedParentDisplay').textContent = `${UI.formatName(name)} — ${phone}`;
+        document.getElementById('selectedParentDisplay').parentElement.classList.remove('hidden');
+        document.getElementById('parentSearchInput').value = '';
+        document.getElementById('parentSearchResults').innerHTML = '';
+    },
+
+    /**
      * Open parent link management modal
      */
     async openParentLinkModal(studentId, studentName, currentParentPhone) {
-        // Get list of all parents
+        UI.loader(true);
         const parentsRes = await App.call('getParentsManagement');
         const parents = parentsRes.success ? parentsRes.parents : [];
+        UI.loader(false);
 
         const hasParent = currentParentPhone && currentParentPhone !== '';
 
@@ -1213,44 +1274,65 @@ const Admin = {
             content: `
                 <div class="space-y-4">
                     ${hasParent ? `
-                        <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-200">
-                            <p class="text-sm text-emerald-800 font-bold mb-1">ولي الأمر الحالي:</p>
-                            <p class="text-emerald-900 font-bold">${currentParentPhone}</p>
+                        <div class="bg-emerald-50 p-3 rounded-lg border border-emerald-200 flex justify-between items-center">
+                            <div>
+                                <p class="text-xs text-emerald-700 font-bold mb-0.5">ولي الأمر الحالي</p>
+                                <p class="text-emerald-900 font-bold font-mono">${currentParentPhone}</p>
+                            </div>
+                            <button onclick="Admin.unlinkParentAction('${studentId}')" 
+                                class="bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1.5 rounded-lg font-bold text-sm transition">
+                                <i class="fas fa-unlink ml-1"></i>إلغاء الربط
+                            </button>
                         </div>
-                        <button onclick="Admin.unlinkParentAction('${studentId}')" 
-                            class="w-full bg-red-500 text-white py-2 rounded-lg font-bold hover:bg-red-600">
-                            <i class="fas fa-unlink ml-2"></i>إلغاء ربط ولي الأمر
-                        </button>
-                        <div class="border-t pt-3">
-                            <p class="text-sm text-gray-600 font-bold mb-2">أو إعادة تعيين لولي أمر آخر:</p>
+                        <p class="text-sm text-gray-500 font-bold">تغيير إلى ولي أمر آخر:</p>
                     ` : `
-                        <p class="text-sm text-gray-600 mb-2">ربط ولي أمر لهذا الطالب:</p>
+                        <p class="text-sm text-gray-600">ابحث عن ولي الأمر بالاسم لربطه بهذا الطالب:</p>
                     `}
-                    
-                    <select id="selectParentPhone" class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold">
-                        <option value="">-- اختر من القائمة --</option>
-                        ${parents.map(p => `<option value="${p.phone}">${p.name} - ${p.phone}</option>`).join('')}
-                    </select>
-                    
-                    <div class="text-center text-gray-400 text-xs">أو</div>
-                    
-                    <input type="tel" id="newParentPhone" placeholder="أدخل رقم هاتف ولي أمر جديد" 
-                        class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold">
-                    
-                    ${hasParent ? '</div>' : ''}
+
+                    <!-- Name Search Input -->
+                    <div>
+                        <div class="relative">
+                            <i class="fas fa-search absolute right-3 top-3.5 text-gray-400 text-sm"></i>
+                            <input type="text" id="parentSearchInput"
+                                placeholder="ابحث باسم ولي الأمر..."
+                                class="w-full pr-10 pl-4 p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-sm"
+                                oninput="document.getElementById('parentSearchResults').innerHTML = Admin._buildParentSearchResults(Admin._cachedParents, this.value)">
+                        </div>
+                        <div id="parentSearchResults" class="mt-1 max-h-48 overflow-y-auto bg-white border border-gray-100 rounded-xl shadow-sm divide-y divide-gray-50">
+                            ${this._buildParentSearchResults(parents, '')}
+                        </div>
+                    </div>
+
+                    <!-- Selected Parent Display -->
+                    <div id="selectedParentDisplay-wrapper" class="hidden">
+                        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2">
+                            <i class="fas fa-user-check text-emerald-600"></i>
+                            <span class="font-bold text-emerald-800 text-sm" id="selectedParentDisplay"></span>
+                        </div>
+                    </div>
+
+                    <input type="hidden" id="selectedParentPhone">
+
+                    <div class="border-t pt-3">
+                        <p class="text-xs text-gray-500 font-bold mb-1">أو أدخل رقم ولي أمر جديد مباشرة:</p>
+                        <input type="tel" id="newParentPhone" placeholder="رقم الهاتف (اختياري)"
+                            class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-sm">
+                    </div>
                 </div>
             `,
             onConfirm: () => Admin.linkParentAction(studentId)
         };
+        // Store parents for live search
+        this._cachedParents = parents;
         this.showDynamicModal(modalParams);
     },
 
     async linkParentAction(studentId) {
-        const selectedPhone = document.getElementById('selectParentPhone').value;
+        const selectedPhone = document.getElementById('selectedParentPhone')?.value || '';
         const newPhone = document.getElementById('newParentPhone').value.trim();
         const parentPhone = newPhone || selectedPhone;
 
-        if (!parentPhone) return UI.showError("الرجاء اختيار أو إدخال رقم هاتف ولي الأمر");
+        if (!parentPhone) return UI.showError("الرجاء اختيار ولي الأمر من القائمة أو إدخال رقم هاتف");
 
         UI.loader(true);
         try {
@@ -1638,14 +1720,42 @@ const Admin = {
     },
 
     renderPermissionsModal(userId, userName, permissions) {
-        // permissions = [{ type: 'Class'|'Teacher', targetId: '...' }]
+        // permissions = [{ type: 'Class'|'Teacher'|'Module', targetId: '...' }]
         const assignedClasses = permissions.filter(p => p.type === 'Class').map(p => String(p.targetId));
         const assignedTeachers = permissions.filter(p => p.type === 'Teacher').map(p => String(p.targetId));
+        const assignedModules = permissions.filter(p => p.type === 'Module').map(p => String(p.targetId));
+        // If no module permissions saved yet, default to all enabled
+        const hasModulePerms = assignedModules.length > 0;
+
+        const modules = [
+            { id: 'module_academic', label: 'شؤون تعليمية', icon: 'fa-university', color: 'emerald' },
+            { id: 'module_people', label: 'الأفراد (مستخدمين / طلاب)', icon: 'fa-users', color: 'blue' },
+            { id: 'module_supervision', label: 'الإشراف والمتابعة', icon: 'fa-eye', color: 'purple' },
+        ];
 
         const content = `
-            <div class="space-y-6 max-h-[70vh] overflow-y-auto px-2">
-                <p class="text-sm text-gray-500">حدد الفصول والمعلمين الذين يشرف عليهم <b>${userName}</b>.</p>
-                
+            <div class="space-y-5 max-h-[75vh] overflow-y-auto px-2">
+                <p class="text-sm text-gray-500">حدد الصلاحيات لـ <b>${userName}</b>.</p>
+
+                <!-- Module Access Toggles -->
+                <div class="bg-purple-50 p-4 rounded-xl border border-purple-200">
+                    <h4 class="font-bold text-purple-700 flex items-center mb-3">
+                        <i class="fas fa-toggle-on text-purple-600 ml-2"></i>الوصول إلى الأقسام
+                    </h4>
+                    <div class="space-y-2">
+                        ${modules.map(m => `
+                            <label class="flex items-center justify-between p-3 bg-white rounded-xl border border-purple-100 cursor-pointer hover:border-purple-300 transition">
+                                <span class="font-bold text-gray-700 flex items-center gap-2 text-sm">
+                                    <i class="fas ${m.icon} text-${m.color}-500"></i>${m.label}
+                                </span>
+                                <input type="checkbox" class="perm-check-module accent-purple-600 w-5 h-5" value="${m.id}"
+                                    ${!hasModulePerms || assignedModules.includes(m.id) ? 'checked' : ''}>
+                            </label>
+                        `).join('')}
+                    </div>
+                    <p class="text-xs text-purple-500 mt-2"><i class="fas fa-info-circle ml-1"></i>إلغاء تحديد قسم يخفيه من واجهة المشرف كلياً.</p>
+                </div>
+
                 <!-- Classes -->
                 <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
                     <div class="flex justify-between items-center mb-3">
@@ -1701,10 +1811,12 @@ const Admin = {
     async savePermissions(userId) {
         const classChecks = document.querySelectorAll('.perm-check-class:checked');
         const teacherChecks = document.querySelectorAll('.perm-check-teacher:checked');
+        const moduleChecks = document.querySelectorAll('.perm-check-module:checked');
 
         const permissions = [];
         classChecks.forEach(c => permissions.push({ type: 'Class', targetId: c.value }));
         teacherChecks.forEach(t => permissions.push({ type: 'Teacher', targetId: t.value }));
+        moduleChecks.forEach(m => permissions.push({ type: 'Module', targetId: m.value }));
 
         UI.loader(true);
         try {

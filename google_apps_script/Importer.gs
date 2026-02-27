@@ -5,7 +5,7 @@
  * 
  * Instructions:
  * 1. Create a sheet named "Import_Source".
- * 2. Header Row must be: StudentName | Branch | Grade | Class | DOB | FatherName | Job | Phone | Address
+ * 2. Header Row must be: Name | Branch | Grade | Class | DOB | Father | Phone | Address
  * 3. Paste your data.
  * 4. Run `importStudentsAndParents`.
  */
@@ -75,14 +75,14 @@ function importStudentsAndParents() {
   // const tempNewClasses = {}; // No longer creating classes
 
   data.forEach(row => {
-    // 0:Name, 1:Branch, 2:Grade, 3:Class, 4:DOB, 5:FatherName, 6:Job, 7:Phone, 8:Address
+    // 0:Name, 1:Branch, 2:Grade, 3:Class, 4:DOB, 5:Father, 6:Phone, 7:Address
     const sName = row[0];
     const sGrade = row[2];
     const sClassVal = row[3];
     const sDOB = row[4];
     const pName = row[5];
-    let pPhone = String(row[7]).trim(); 
-    const pAddress = row[8];
+    let pPhone = String(row[6]).trim(); 
+    const pAddress = row[7];
     
     if (!sName || !pPhone) return; // Skip invalid rows
 

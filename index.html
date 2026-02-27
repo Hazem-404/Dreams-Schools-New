@@ -9,9 +9,25 @@
     <!-- PWA Configuration -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#10B981">
+
+    <!-- iOS PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3413/3413535.png">
+    <meta name="apple-mobile-web-app-title" content="Dreams Schools">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <!-- iOS App Icons (multiple sizes for different devices) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="logo.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="logo.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="logo.png">
+    <link rel="apple-touch-icon" href="logo.png">
+    <link rel="icon" type="image/png" href="logo.png">
+
+    <!-- SEO & Open Graph -->
+    <meta name="description" content="نظام الإدارة المدرسية الذكي - Dreams Schools">
+    <meta property="og:title" content="Dreams Schools System">
+    <meta property="og:description" content="نظام الإدارة المدرسية الذكي">
+    <meta property="og:type" content="website">
 
     <!-- Styles & Fonts -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -38,7 +54,7 @@
         <header id="topNav"
             class="bg-white shadow-sm px-4 py-3 flex justify-between items-center z-40 sticky top-0 hidden">
             <div class="flex items-center gap-3">
-                <img src="https://cdn-icons-png.flaticon.com/512/3413/3413535.png" class="w-8 h-8" alt="Logo">
+                <img src="logo.png" class="w-8 h-8 rounded-lg object-contain" alt="Dreams Schools Logo">
                 <h1 class="font-bold text-lg text-emerald-700">Dreams Schools</h1>
             </div>
             <div class="flex gap-3">
@@ -64,30 +80,29 @@
                     <!-- Glass Card -->
                     <div
                         class="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/20 transform transition-all hover:scale-[1.01]">
-                        <div class="text-center mb-8">
-                            <div
-                                class="bg-gradient-to-tr from-emerald-500 to-teal-400 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/30">
-                                <i class="fas fa-school text-5xl text-white"></i>
+
+                        <!-- Logo inside card -->
+                        <div class="text-center mb-6">
+                            <div class="flex items-center justify-center mx-auto mb-3">
+                                <div class="logo-3d-wrapper">
+                                    <img src="logo.png" class="logo-3d w-40 h-40 object-contain"
+                                        alt="Dreams Schools Logo">
+                                </div>
                             </div>
-                            <h2 class="text-3xl font-extrabold text-slate-800 tracking-tight mb-2">Dreams School</h2>
                             <p class="text-slate-500 font-medium text-sm">نظام الإدارة المدرسية الذكي</p>
                         </div>
 
                         <form onsubmit="Auth.login(event)">
                             <div class="mb-5 relative group">
-                                <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                                    <i
-                                        class="fas fa-phone text-gray-400 group-focus-within:text-emerald-500 transition"></i>
-                                </div>
+                                <i
+                                    class="fas fa-phone absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition pointer-events-none"></i>
                                 <input type="tel" id="loginPhone" placeholder="رقم الهاتف"
                                     class="w-full pr-12 pl-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition font-bold text-gray-700"
                                     required>
                             </div>
                             <div class="mb-8 relative group">
-                                <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                                    <i
-                                        class="fas fa-lock text-gray-400 group-focus-within:text-emerald-500 transition"></i>
-                                </div>
+                                <i
+                                    class="fas fa-lock absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition pointer-events-none"></i>
                                 <input type="password" id="loginPass" placeholder="كلمة المرور"
                                     class="w-full pr-12 pl-4 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition font-bold text-gray-700"
                                     required>
