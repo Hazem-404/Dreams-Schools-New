@@ -59,6 +59,9 @@ const Moderator = {
             tabs.push(`<button onclick="Moderator.switchTab('ClassControl')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="ClassControl">
                 <i class="fas fa-edit ml-2"></i>تسجيل الحصص
             </button>`);
+            tabs.push(`<button onclick="Moderator.switchTab('Warnings')" class="tab-btn bg-white text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg font-bold transition border border-red-200" data-tab="Warnings">
+                <i class="fas fa-exclamation-triangle ml-2"></i>الإنذارات
+            </button>`);
         }
         if (allowed.includes('module_academic')) {
             tabs.push(`<button onclick="Moderator.switchTab('Allocations')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="Allocations">
@@ -103,6 +106,7 @@ const Moderator = {
         else if (tab === 'Reviews') this.renderReviews();
         else if (tab === 'Allocations') this.renderAllocations();
         else if (tab === 'ClassControl') this.renderClassControl();
+        else if (tab === 'Warnings') this.renderWarnings();
     },
 
     renderMonitoring() {
@@ -138,14 +142,27 @@ const Moderator = {
         const date = document.getElementById('modDate').value;
 
         if (!classId) return UI.showError("اختر الفصل");
+        if (!date) return UI.showError("اختر التاريخ");
 
         const resDiv = document.getElementById('modResults');
         resDiv.innerHTML = UI.spinner();
 
+        // Build a subject id→name map from lookups
+        const subjectMap = {};
+        (this.lookups.subjects || []).forEach(s => subjectMap[String(s.id)] = s.name);
+
         try {
             const res = await App.call('getAdminActivity', { classId, date });
             if (res.success) {
-                // 1. Teachers Section
+                if (res.logs.length === 0 && res.notes.length === 0) {
+                    resDiv.innerHTML = `<div class="p-10 text-center bg-white rounded-xl border border-gray-200">
+                        <i class="fas fa-calendar-times text-4xl text-gray-300 mb-4"></i>
+                        <p class="font-bold text-gray-500">لا توجد بيانات مسجلة لهذا اليوم</p>
+                    </div>`;
+                    return;
+                }
+
+                // 1. Teachers Section — resolve subject name from map
                 let teachersHtml = `
                     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-in">
                         <h3 class="bg-gray-50 p-3 font-bold text-gray-700 border-b flex justify-between items-center">
@@ -153,11 +170,13 @@ const Moderator = {
                             <span class="text-xs bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full border border-emerald-200">${res.logs.length} حصص</span>
                         </h3>
                         <div class="divide-y divide-gray-100">
-                            ${res.logs.length ? res.logs.map(l => `
+                            ${res.logs.length ? res.logs.map(l => {
+                    const subjectName = subjectMap[String(l.subject)] || l.subject;
+                    return `
                                 <div class="p-4 hover:bg-gray-50 transition">
                                     <div class="flex justify-between mb-3">
                                         <span class="font-bold text-emerald-700 text-lg">${UI.formatName(l.teacher)}</span>
-                                        <span class="text-xs text-gray-600 bg-gray-200 px-2 py-1 rounded font-bold self-start">${l.subject}</span>
+                                        <span class="text-xs text-gray-600 bg-gray-200 px-2 py-1 rounded font-bold self-start">${subjectName}</span>
                                     </div>
                                     <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-2">
                                         <p class="text-gray-500 text-xs font-bold mb-1">المحتوى:</p>
@@ -167,8 +186,8 @@ const Moderator = {
                                         <p class="text-orange-800 text-xs font-bold mb-1">الواجب:</p>
                                         <p class="text-gray-800 text-sm leading-relaxed">${l.homework || '-'}</p>
                                     </div>
-                                </div>
-                            `).join('') : '<div class="p-10 text-center text-gray-400">لا يوجد نشاط مسجل للمعلمين في هذا اليوم</div>'}
+                                </div>`;
+                }).join('') : '<div class="p-10 text-center text-gray-400">لا يوجد نشاط مسجل للمعلمين في هذا اليوم</div>'}
                         </div>
                     </div>
                 `;
@@ -178,6 +197,7 @@ const Moderator = {
                     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-in mt-6">
                         <div class="bg-gray-50 p-3 border-b flex justify-between items-center">
                             <h3 class="font-bold text-gray-700"><i class="fas fa-user-graduate text-red-500 ml-2"></i>المتابعة</h3>
+                            <span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full border border-red-200">${res.notes.length} ملاحظة</span>
                         </div>
                         <div class="divide-y divide-gray-100 max-h-96 overflow-y-auto">
                             ${res.notes.length ? res.notes.map(n => `
@@ -217,7 +237,6 @@ const Moderator = {
             if (res.success) {
                 // Filter Client Side
                 const myClassIds = this.lookups.classes.map(c => String(c.id));
-
                 const myLogs = res.logs.filter(l => myClassIds.includes(String(l.classId)));
 
                 if (myLogs.length === 0) {
@@ -235,17 +254,36 @@ const Moderator = {
 
                 const html = `
                     <div class="space-y-4 animate-fadeIn">
-                        <h3 class="font-bold text-gray-700 text-lg mb-4 flex items-center">
-                            <i class="fas fa-clipboard-check text-emerald-600 ml-2"></i>سجلات بانتظار المراجعة
-                            <span class="mr-2 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full border border-emerald-200">${myLogs.length}</span>
-                        </h3>
-                        <div class="grid gap-4">
+                        <!-- Header + Batch Actions -->
+                        <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+                            <h3 class="font-bold text-gray-700 text-lg flex items-center">
+                                <i class="fas fa-clipboard-check text-emerald-600 ml-2"></i>سجلات بانتظار المراجعة
+                                <span class="mr-2 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full border border-emerald-200">${myLogs.length}</span>
+                            </h3>
+                            <div class="flex gap-2 flex-wrap">
+                                <label class="flex items-center gap-2 cursor-pointer bg-white border border-gray-200 px-3 py-2 rounded-lg font-bold text-sm text-gray-600 hover:bg-gray-50 transition">
+                                    <input type="checkbox" id="selectAllLogs" onchange="Moderator._toggleSelectAll(this)" class="w-4 h-4 accent-emerald-600">
+                                    تحديد الكل
+                                </label>
+                                <button onclick="Moderator.batchReviewSelected('Approved')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm text-sm">
+                                    <i class="fas fa-check-double ml-1"></i>موافقة على المحدد
+                                </button>
+                                <button onclick="Moderator.batchReviewSelected('Rejected')" class="bg-red-50 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-100 transition border border-red-200 text-sm">
+                                    <i class="fas fa-times ml-1"></i>رفض المحدد
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="reviewLogsList" class="grid gap-4">
                             ${myLogs.map(log => `
-                                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition">
+                                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition" id="logCard_${log.id}">
                                     <div class="flex justify-between items-start mb-3">
-                                        <div>
-                                            <h4 class="font-bold text-gray-800 text-lg">${log.className} - ${log.subjectName}</h4>
-                                            <p class="text-sm text-gray-500 font-bold"><i class="fas fa-user ml-1"></i> ${UI.formatName(log.teacherName)}</p>
+                                        <div class="flex items-start gap-3">
+                                            <input type="checkbox" class="log-select-cb w-5 h-5 mt-1 accent-emerald-600 rounded" data-log-id="${log.id}">
+                                            <div>
+                                                <h4 class="font-bold text-gray-800 text-lg">${log.className} - ${log.subjectName}</h4>
+                                                <p class="text-sm text-gray-500 font-bold"><i class="fas fa-user ml-1"></i> ${UI.formatName(log.teacherName)}</p>
+                                            </div>
                                         </div>
                                         <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold">${log.date}</span>
                                     </div>
@@ -292,6 +330,38 @@ const Moderator = {
         } catch (e) {
             console.error(e);
             container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold">حدث خطأ: ${e.message}</div>`;
+        }
+    },
+
+    _toggleSelectAll(source) {
+        document.querySelectorAll('.log-select-cb').forEach(cb => cb.checked = source.checked);
+    },
+
+    async batchReviewSelected(status) {
+        const selectedIds = [...document.querySelectorAll('.log-select-cb:checked')].map(cb => cb.dataset.logId);
+        if (selectedIds.length === 0) return UI.showError('لم تقم باختيار أي سجل');
+
+        const label = status === 'Approved' ? 'الموافقة' : 'الرفض';
+        if (!confirm(`هل أنت متأكد من ${label} على ${selectedIds.length} سجل؟`)) return;
+
+        UI.loader(true);
+        let successCount = 0;
+        for (const logId of selectedIds) {
+            try {
+                const res = await App.call('reviewLog', { logId, status });
+                if (res.success) {
+                    successCount++;
+                    // Remove card from UI immediately
+                    const card = document.getElementById('logCard_' + logId);
+                    if (card) card.remove();
+                }
+            } catch (e) { console.error(e); }
+        }
+        UI.loader(false);
+        UI.showError(`تم ${label} على ${successCount} سجل بنجاح`, 'green');
+        // If all done, reload
+        if (document.querySelectorAll('.log-select-cb').length === 0) {
+            this.renderReviews();
         }
     },
 
@@ -583,5 +653,195 @@ const Moderator = {
             }
         } catch (e) { alert(e.message); }
         UI.loader(false);
-    }
+    },
+
+    // ==============================
+    // WARNINGS MODULE (Supervisor)
+    // ==============================
+
+    renderWarnings() {
+        const container = document.getElementById('modContent');
+        const html = `
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
+                <!-- Sidebar: Selection & Form -->
+                <div class="space-y-6">
+                    <!-- Selection -->
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                        <h3 class="font-bold text-gray-700 mb-4 border-b pb-2">1. اختيار الطالب</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">الفصل</label>
+                                <select id="modWarnClass" onchange="Moderator._loadWarnStudents(this.value)" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold text-gray-700">
+                                    <option value="">اختر الفصل...</option>
+                                    ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">الطالب</label>
+                                <select id="modWarnStudent" onchange="Moderator._loadStudentWarnings(this.value)" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold text-gray-700" disabled>
+                                    <option value="">اختر الفصل أولاً...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Add Warning Form -->
+                    <div id="modAddWarningForm" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hidden border-t-4 border-t-red-500">
+                        <h3 class="font-bold text-red-600 mb-4 flex items-center"><i class="fas fa-exclamation-circle ml-2"></i>إصدار إنذار جديد</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">نوع الإنذار</label>
+                                <select id="modWarnType" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-bold text-gray-700">
+                                    <option value="Behavior">سلوك (Behavior)</option>
+                                    <option value="Attendance">غياب (Attendance)</option>
+                                    <option value="Academic">أكاديمي (Academic)</option>
+                                    <option value="Dismissal">فصل (Dismissal)</option>
+                                    <option value="Other">أخرى (Other)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">التفاصيل / ملاحظات</label>
+                                <textarea id="modWarnDetails" rows="4" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 placeholder-gray-400 font-medium" placeholder="اكتب تفاصيل المخالفة هنا..."></textarea>
+                            </div>
+                            <button onclick="Moderator._submitWarning()" class="w-full bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700 transition shadow-md flex justify-center items-center gap-2">
+                                <i class="fas fa-paper-plane"></i> إصدار الإنذار
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main: Warnings List -->
+                <div class="md:col-span-2">
+                    <div id="modWarningsList" class="space-y-4">
+                        <div class="text-center text-gray-400 py-20 bg-gray-50 rounded-xl border-dashed border-2 border-gray-200">
+                            <i class="fas fa-user-slash text-4xl mb-4 opacity-50"></i>
+                            <p class="font-bold">يرجى اختيار طالب لعرض سجل الإنذارات</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.innerHTML = html;
+    },
+
+    async _loadWarnStudents(classId) {
+        const sel = document.getElementById('modWarnStudent');
+        const form = document.getElementById('modAddWarningForm');
+        sel.innerHTML = '<option value="">جاري التحميل...</option>';
+        sel.disabled = true;
+        if (form) form.classList.add('hidden');
+        document.getElementById('modWarningsList').innerHTML = '<div class="text-center text-gray-400 py-20">...</div>';
+
+        if (!classId) {
+            sel.innerHTML = '<option value="">اختر الفصل أولاً...</option>';
+            return;
+        }
+        try {
+            const res = await App.call('getClassStudents', { classId });
+            if (res.success) {
+                sel.innerHTML = '<option value="">اختر الطالب...</option>' +
+                    res.students.map(s => `<option value="${s.id}">${UI.formatName(s.name)}</option>`).join('');
+                sel.disabled = false;
+            } else {
+                sel.innerHTML = '<option value="">فشل التحميل</option>';
+            }
+        } catch (e) { console.error(e); }
+    },
+
+    async _loadStudentWarnings(studentId) {
+        const listContainer = document.getElementById('modWarningsList');
+        const form = document.getElementById('modAddWarningForm');
+        if (!studentId) {
+            if (form) form.classList.add('hidden');
+            listContainer.innerHTML = '';
+            return;
+        }
+        if (form) form.classList.remove('hidden');
+        listContainer.innerHTML = '<div class="spinner mx-auto border-gray-300 border-t-red-600"></div>';
+        try {
+            const res = await App.call('getStudentWarnings', { studentId });
+            if (res.success) {
+                this._renderWarningsList(res.warnings);
+            } else {
+                listContainer.innerHTML = `<div class="text-red-500">${res.message}</div>`;
+            }
+        } catch (e) {
+            listContainer.innerHTML = `<div class="text-red-500">${e.message}</div>`;
+        }
+    },
+
+    _renderWarningsList(warnings) {
+        const container = document.getElementById('modWarningsList');
+        if (!warnings || warnings.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-emerald-500 py-10 bg-emerald-50 rounded-xl border border-emerald-100">
+                    <i class="fas fa-check-circle text-4xl mb-3"></i>
+                    <p class="font-bold">سجل الطالب نظيف! لا توجد إنذارات.</p>
+                </div>
+            `;
+            return;
+        }
+        const typeColors = { 'Behavior': 'bg-orange-100 text-orange-700 border-orange-200', 'Attendance': 'bg-blue-100 text-blue-700 border-blue-200', 'Dismissal': 'bg-red-100 text-red-700 border-red-200', 'Academic': 'bg-purple-100 text-purple-700 border-purple-200', 'Other': 'bg-gray-100 text-gray-700 border-gray-200' };
+        const typeLabels = { 'Behavior': 'سلوك', 'Attendance': 'غياب', 'Dismissal': 'فصل', 'Academic': 'أكاديمي', 'Other': 'أخرى' };
+        container.innerHTML = `
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="font-bold text-gray-700">سجل الإنذارات (${warnings.length})</h3>
+            </div>
+            ${warnings.map(w => `
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-start md:items-center relative overflow-hidden group">
+                    <div class="absolute right-0 top-0 bottom-0 w-1 ${w.type === 'Dismissal' ? 'bg-red-500' : 'bg-orange-400'}"></div>
+                    <div class="flex-1">
+                        <div class="flex justify-between items-start">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="${typeColors[w.type] || typeColors['Other']} px-2 py-1 rounded text-xs font-bold border">${typeLabels[w.type] || w.type}</span>
+                                <span class="text-gray-400 text-xs font-bold"><i class="far fa-calendar-alt ml-1"></i>${w.date}</span>
+                            </div>
+                            <button onclick="Moderator._deleteWarning('${w.id}')" class="text-red-400 hover:text-red-600 p-1 md:hidden"><i class="fas fa-trash"></i></button>
+                        </div>
+                        <p class="text-gray-800 font-bold text-sm mt-2 leading-relaxed">${w.details}</p>
+                        <div class="mt-2 text-xs text-gray-400">حرره: ${w.createdBy}</div>
+                    </div>
+                    <div class="hidden md:block">
+                        <button onclick="Moderator._deleteWarning('${w.id}')" class="bg-red-50 text-red-500 hover:bg-red-100 p-2 rounded-lg transition" title="حذف الإنذار"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+            `).join('')}
+        `;
+    },
+
+    async _submitWarning() {
+        const studentId = document.getElementById('modWarnStudent').value;
+        const type = document.getElementById('modWarnType').value;
+        const details = document.getElementById('modWarnDetails').value.trim();
+        if (!studentId) return alert('يرجى اختيار طالب');
+        if (!details) return alert('يرجى كتابة التفاصيل');
+        if (!confirm('هل أنت متأكد من إصدار هذا الإنذار؟ سيظهر لولي الأمر فوراً.')) return;
+        UI.loader(true);
+        try {
+            const res = await App.call('addWarning', { studentId, type, details, createdBy: App.user.name || 'المشرف' });
+            if (res.success) {
+                document.getElementById('modWarnDetails').value = '';
+                this._loadStudentWarnings(studentId);
+            } else {
+                alert(res.message);
+            }
+        } catch (e) { alert(e.message); }
+        UI.loader(false);
+    },
+
+    async _deleteWarning(warningId) {
+        if (!confirm('هل أنت متأكد من حذف هذا الإنذار؟')) return;
+        UI.loader(true);
+        try {
+            const res = await App.call('deleteWarning', { warningId });
+            if (res.success) {
+                const studentId = document.getElementById('modWarnStudent').value;
+                this._loadStudentWarnings(studentId);
+            } else {
+                alert(res.message);
+            }
+        } catch (e) { alert(e.message); }
+        UI.loader(false);
+    },
+
 };

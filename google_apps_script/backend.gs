@@ -885,6 +885,16 @@ function adminSaveData(type, rowData) {
   }
 
   sheet.appendRow(rowData);
+
+  // Invalidate teacher class cache if this is an Allocation
+  if (type === "Allocations" && rowData[1]) {
+    try {
+      const cache = CacheService.getScriptCache();
+      cache.remove("t_classes_" + String(rowData[1]));
+    } catch(e) {}
+  }
+
+  _invalidateDataCaches();
   return { success: true, message: "تم الحفظ بنجاح" };
 }
 
@@ -917,7 +927,19 @@ function adminDeleteData(type, id) {
   
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
+      // Save teacherId before deleting (for cache invalidation)
+      const teacherId = (type === "Allocations") ? String(data[i][1]) : null;
       sheet.deleteRow(i + 1);
+
+      // Invalidate teacher class cache if this is an Allocation
+      if (teacherId) {
+        try {
+          const cache = CacheService.getScriptCache();
+          cache.remove("t_classes_" + teacherId);
+        } catch(e) {}
+      }
+
+      _invalidateDataCaches();
       return { success: true, message: "تم الحذف بنجاح" };
     }
   }

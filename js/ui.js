@@ -5,13 +5,19 @@ const UI = {
         else el.classList.add('hidden');
     },
 
-    showError(msg) {
+    showError(msg, color = 'dark') {
         // Simple Toast implementation
         const toast = document.createElement('div');
-        toast.className = "fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg z-[100] text-sm font-bold flex items-center gap-2 fade-in";
-        toast.innerHTML = `<i class="fas fa-info-circle text-yellow-400"></i> ${msg}`;
+        const bg = color === 'green' ? 'bg-emerald-600' : 'bg-gray-800';
+        toast.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 ${bg} text-white px-6 py-3 rounded-full shadow-lg z-[100] text-sm font-bold flex items-center gap-2 fade-in`;
+        const icon = color === 'green' ? 'fa-check-circle text-white' : 'fa-info-circle text-yellow-400';
+        toast.innerHTML = `<i class="fas ${icon}"></i> ${msg}`;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
+    },
+
+    spinner() {
+        return '<div class="flex justify-center p-10"><div class="spinner border-gray-300 border-t-emerald-600"></div></div>';
     },
 
     toggleChangePass(show = true) {
