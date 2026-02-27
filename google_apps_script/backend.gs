@@ -137,21 +137,24 @@ function getDashboardData(userId, role, phone) {
   if (role !== "Parent") return { success: false, message: "Invalid Role" };
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // 1. Batch Load: read all needed sheets up front
+  // 1. Batch Load: قراءة كل الشيتات مرة واحدة
   const classMap = {};
   ss.getSheetByName("Classes").getDataRange().getValues().forEach(r => classMap[r[0]] = r[1]);
   
-  // 2. Load Enrollments once, build two maps from it
+  // 2. Load Enrollments once
   const enrollData = ss.getSheetByName("Enrollments").getDataRange().getValues();
   const studToClassId = {};
   enrollData.forEach(r => studToClassId[r[1]] = r[2]);
     
-  // 3. Find Children by Phone (using already-loaded data)
+  // 3. قراءة Logs و Attendance مرة واحدة ونمررهم للـ helper
+  const logData = ss.getSheetByName("Daily_Logs").getDataRange().getValues();
+  const attData = ss.getSheetByName("Attendance").getDataRange().getValues();
+
   const studs = ss.getSheetByName("Students").getDataRange().getValues();
 
   const warnSheet = ss.getSheetByName("Warnings");
   const warnData = warnSheet ? warnSheet.getDataRange().getValues() : [];
-  const warnMap = {}; // StudentID -> Count
+  const warnMap = {};
   for (let w = 1; w < warnData.length; w++) {
       const sId = warnData[w][1];
       warnMap[sId] = (warnMap[sId] || 0) + 1;
@@ -161,82 +164,57 @@ function getDashboardData(userId, role, phone) {
   const kids = [];
   
   for (let i = 1; i < studs.length; i++) {
-    // Students Schema: [ID, Name, ParentPhone, ...]
-    // Col 2 is ParentPhone (Index 2)
     if (normalizePhone(String(studs[i][2])) === pPhone) {
       const sId = studs[i][0];
       const sClassId = studToClassId[sId];
       
-      const activity = _getStudentActivityHelper(sId, sClassId, ss);
+      // تمرير البيانات المقروءة مسبقاً بدل إعادة قراءة الشيتات
+      const activity = _getStudentActivityHelper(sId, sClassId, logData, attData);
       
       kids.push({ 
         id: sId, 
         name: studs[i][1], 
         className: classMap[sClassId] || "غير مسجل",
         notificationCount: activity.length,
-        warningCount: warnMap[sId] || 0 // NEW
+        warningCount: warnMap[sId] || 0
       });
     }
   }
   
   const res = { success: true, children: kids };
-  _saveToCache(cacheKey + "_v3", res, 1800); // 30 mins
+  _saveToCache(cacheKey, res, 1800); // FIX: same key as read
   return res;
 }
 
-// Helper to avoid duplication
-function _getStudentActivityHelper(studentId, classId, ss) {
+// Helper - يقبل البيانات مباشرة بدل قراءة الشيتات من جديد
+function _getStudentActivityHelper(studentId, classId, logData, attData) {
     if (!classId) return [];
     
     const datesMap = {};
+    const logIdMap = {};
+    const sClassId = String(classId);
     
-    // Scan Logs
-    const logSheet = ss.getSheetByName("Daily_Logs");
-    const logData = logSheet.getDataRange().getValues();
-    
-    // Optimization: Read all logs once? No, this function is called per student.
-    // Given the low number of children per parent, it's okay.
-    // To optimize further, we could pass logData as arg.
-    
+    // Scan Logs (البيانات ممررة من الخارج - لا قراءة هنا)
     for (let i = 1; i < logData.length; i++) {
         const r = logData[i];
-        if (String(r[2]) === String(classId) && (r[10] === 'Approved' || !r[10])) {
+        if (String(r[2]) === sClassId && (r[10] === 'Approved' || !r[10])) {
             try {
                 const d = new Date(r[1]).toISOString().split('T')[0];
+                logIdMap[r[0]] = d;
                 if (!datesMap[d]) datesMap[d] = { date: d };
-            } catch (e) {
-                // Skip invalid dates
-            }
+            } catch (e) {}
         }
     }
     
-    // Scan Attendance
-    const attSheet = ss.getSheetByName("Attendance");
-    const attData = attSheet.getDataRange().getValues();
-    
-    // Need LogID -> Date map? 
-    // We can infer date from logData loop above?
-    // Let's rebuild logId map
-    const logIdMap = {};
-    logData.forEach(r => {
-        try {
-            logIdMap[r[0]] = new Date(r[1]).toISOString().split('T')[0];
-        } catch (e) {}
-    });
-
+    // Scan Attendance (البيانات ممررة من الخارج - لا قراءة هنا)
+    const sStudId = String(studentId);
     for (let i = 1; i < attData.length; i++) {
-        if (String(attData[i][2]) === String(studentId)) {
-            const d = logIdMap[attData[i][1]]; // Get date from LogID
+        if (String(attData[i][2]) === sStudId) {
+            const d = logIdMap[attData[i][1]];
             if (d && !datesMap[d]) datesMap[d] = { date: d };
-            // Note: We don't need detailed alerts here, just count of days with activity?
-            // User wants "Number of updates". A day with update = 1 update.
         }
     }
     
-    // Filter for "Recent" (e.g. last 7 or 30 days)? 
-    // User said "Previous notifications".
-    // Let's return all active days count (limit 15 in details, but maybe count all unread? We don't have read state).
-    // Let's just return count of last 30 days activity.
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 30);
     
@@ -300,13 +278,18 @@ function getStudentReport(studentId, dateStr) {
 }
 
 function getStudentRecentActivity(studentId) {
+  const cacheKey = "stud_act_" + studentId;
+  const cached = _getFromCache(cacheKey);
+  if (cached) return cached;
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sStudId = String(studentId);
   
   // 1. Get Class ID from Enrollments
   const enrolls = ss.getSheetByName("Enrollments").getDataRange().getValues();
   let classId = null;
   for (let i = 1; i < enrolls.length; i++) {
-      if (String(enrolls[i][1]) === String(studentId)) {
+      if (String(enrolls[i][1]) === sStudId) {
           classId = enrolls[i][2];
           break;
       }
@@ -315,21 +298,18 @@ function getStudentRecentActivity(studentId) {
   if (!classId) return { success: true, activity: [] };
   
   const datesMap = {};
-  
-  // 2. Scan Daily Logs (Approved + Class Match)
-  const logSheet = ss.getSheetByName("Daily_Logs");
-  const logData = logSheet.getDataRange().getValues();
-  
   const logIdToDate = {};
+  const sClassId = String(classId);
+  
+  // 2. Scan Daily Logs
+  const logData = ss.getSheetByName("Daily_Logs").getDataRange().getValues();
   
   for (let i = 1; i < logData.length; i++) {
     const r = logData[i];
-    // r[2] = ClassId, r[10] = Status, r[1] = Date
-    if (String(r[2]) === String(classId) && (r[10] === 'Approved' || !r[10])) {
+    if (String(r[2]) === sClassId && (r[10] === 'Approved' || !r[10])) {
         try {
             const d = new Date(r[1]).toISOString().split('T')[0];
             logIdToDate[r[0]] = d;
-            
             if (!datesMap[d]) datesMap[d] = { date: d, count: 0, alerts: [] };
             datesMap[d].count++;
         } catch(e) {}
@@ -337,19 +317,14 @@ function getStudentRecentActivity(studentId) {
   }
   
   // 3. Scan Attendance
-  const attSheet = ss.getSheetByName("Attendance");
-  const attData = attSheet.getDataRange().getValues();
+  const attData = ss.getSheetByName("Attendance").getDataRange().getValues();
   
   for (let i = 1; i < attData.length; i++) {
-      if (String(attData[i][2]) === String(studentId)) {
-          const lId = attData[i][1];
-          const d = logIdToDate[lId]; 
-          // Note: If log was valid (approved/class match), d exists.
-          
+      if (String(attData[i][2]) === sStudId) {
+          const d = logIdToDate[attData[i][1]];
           if (d && datesMap[d]) {
               const status = attData[i][3];
               const note = attData[i][4];
-              
               if (status === 'Absent') datesMap[d].alerts.push('غائب');
               else if (status === 'Late') datesMap[d].alerts.push('تأخر');
               if (note) datesMap[d].alerts.push('ملاحظة');
@@ -358,8 +333,9 @@ function getStudentRecentActivity(studentId) {
   }
   
   const activity = Object.values(datesMap).sort((a,b) => new Date(b.date) - new Date(a.date));
-  
-  return { success: true, activity: activity.slice(0, 15) };
+  const res = { success: true, activity: activity.slice(0, 15) };
+  _saveToCache(cacheKey, res, 300); // 5 mins cache
+  return res;
 }
 
 // ==========================================
@@ -403,10 +379,16 @@ function getClassStudents(classId) {
   const enroll = ss.getSheetByName("Enrollments").getDataRange().getValues();
   const studs = ss.getSheetByName("Students").getDataRange().getValues();
   
-  const sIds = enroll.filter(r => r[2] == classId).map(r => r[1]);
-  const result = studs
-    .filter(r => sIds.includes(r[0]))
-    .map(r => ({ id: r[0], name: r[1] }));
+  // FIX: استخدام Set بدل includes() لتحسين البحث من O(N²) إلى O(N)
+  const sIdSet = new Set();
+  for (let i = 1; i < enroll.length; i++) {
+    if (String(enroll[i][2]) === String(classId)) sIdSet.add(String(enroll[i][1]));
+  }
+  
+  const result = [];
+  for (let i = 1; i < studs.length; i++) {
+    if (sIdSet.has(String(studs[i][0]))) result.push({ id: studs[i][0], name: studs[i][1] });
+  }
     
   return { success: true, students: result };
 }
@@ -430,23 +412,18 @@ function saveDailyLog(payload) {
     }
     
     if (foundIndex !== -1) {
-        // Update Row (Indices: 6=Content, 7=HW, 8=Notes, 10=Status)
-        // [0:ID, 1:Date, 2:Class, 3:Subj, 4:Teacher, 5:Term, 6:Cont, 7:HW, 8:Note, 9:Time, 10:Status]
-        
-        // We preserve Date/Class/Subj/Teacher usually, or update them?
-        // Let's allow updating Content, HW, Notes. Date too if needed.
-        if (payload.date) logSheet.getRange(foundIndex + 1, 2).setValue(new Date(payload.date));
-        if (payload.content !== undefined) logSheet.getRange(foundIndex + 1, 7).setValue(payload.content);
-        if (payload.homework !== undefined) logSheet.getRange(foundIndex + 1, 8).setValue(payload.homework);
-        if (payload.notes !== undefined) logSheet.getRange(foundIndex + 1, 9).setValue(payload.notes);
-        
-        // Reset Status to Pending on Edit
-        logSheet.getRange(foundIndex + 1, 11).setValue("Pending");
-        
-        // Reset Supervisor Note (Col 12 / Index 11)?? Or keep it so teacher sees why they edited?
-        // User didn't specify, but usually if teacher edits, it's a new submission for review.
-        // Let's keep the note in history? Or clear it?
-        // Let's KEEP it for now so they know what they addressed, but Status Pending makes it clear.
+        // FIX: كتابة الحقول كلها في batch واحد بدل 4 كتابات منفردة
+        const row = data[foundIndex];
+        logSheet.getRange(foundIndex + 1, 1, 1, 11).setValues([[
+          row[0], // ID (محفوظ)
+          payload.date ? new Date(payload.date) : row[1],
+          row[2], row[3], row[4], row[5], // Class, Subj, Teacher, Term (محفوظة)
+          payload.content !== undefined ? payload.content : row[6],
+          payload.homework !== undefined ? payload.homework : row[7],
+          payload.notes !== undefined ? payload.notes : row[8],
+          row[9], // Timestamp (محفوظ)
+          "Pending" // Reset Status
+        ]]);
     } else {
         return { success: false, message: "Log not found for update" };
     }
@@ -484,36 +461,35 @@ function saveDailyLog(payload) {
      
      const newRows = [];
      
+     const now = new Date();
+     // FIX: جمع كل التحديثات أولاً ثم كتابة batch واحد
+     const updateRanges = []; // { rowIndex, values }
+     
      payload.studentsStatus.forEach(s => {
          const rowIndex = existingMap[s.id];
          if (rowIndex) {
-             // UPDATE existing row
-             // Cols: 1:ID, 2:Log, 3:Stud, 4:Stats, 5:Note, 6:Time
-             attSheet.getRange(rowIndex, 4).setValue(s.status || "Present");
-             attSheet.getRange(rowIndex, 5).setValue(s.note || "");
-             attSheet.getRange(rowIndex, 6).setValue(new Date());
+             // تجميع updates بدل كتابتها فوراً
+             updateRanges.push({ rowIndex, values: [s.status || "Present", s.note || "", now] });
          } else {
-             // Prepare for APPEND
-             // Only append if NOT Present/Empty (optimization) OR if we want to be explicit?
-             // Strategy: If "Present" and no note, we don't strictly need a row if we assume default is Present.
-             // BUT: To be safe and since we stopped deleting, let's just save relevant states.
-             // If Status is Present and Note is Empty -> Skip appending (Clean DB)
              if ((s.status === 'Present' || !s.status) && !s.note) return;
-             
              newRows.push([
                 "A_" + Math.floor(Math.random()*1000000),
                 logId, 
                 s.id, 
                 s.status || "Present", 
                 s.note || "", 
-                new Date()
+                now
              ]);
          }
      });
      
+     // FIX: كتابة كل update في Range واحد بدل 3 setValue() لكل طالب
+     updateRanges.forEach(u => {
+       attSheet.getRange(u.rowIndex, 4, 1, 3).setValues([u.values]);
+     });
+     
      // Append new rows in batch
      if (newRows.length > 0) {
-        // Ensure header if empty
         if(attSheet.getLastColumn() < 6 && attSheet.getLastRow() === 0) {
             attSheet.appendRow(["Att_ID", "Log_ID", "Student_ID", "Status", "Note", "Timestamp"]);
         }
@@ -781,9 +757,7 @@ function getPendingLogs() {
 }
 
 function reviewLog(payload) {
-  // payload: { logId, status, content, homework, notes }
-  // status: 'Approved' or 'Rejected'
-  
+  // payload: { logId, status, supervisorNote, content, homework, notes, updates }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("Daily_Logs");
   const data = sheet.getDataRange().getValues();
@@ -791,51 +765,56 @@ function reviewLog(payload) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(payload.logId)) {
       
-      // Update Status (Col 10 -> Index 10 -> Column 11)
-      sheet.getRange(i + 1, 11).setValue(payload.status);
+      // FIX: كتابة Status + SupervisorNote في كتابة واحدة (Col 11 + 12)
+      sheet.getRange(i + 1, 11, 1, 2).setValues([
+        [payload.status, payload.supervisorNote !== undefined ? payload.supervisorNote : (data[i][11] || "")]
+      ]);
       
-      // Update Supervisor Note (Col 11 -> Index 11 -> Column 12)
-      if (payload.supervisorNote !== undefined) {
-         sheet.getRange(i + 1, 12).setValue(payload.supervisorNote);
+      // FIX: كتابة Content + HW + Notes في كتابة واحدة (Col 7,8,9)
+      if (payload.content !== undefined || payload.homework !== undefined || payload.notes !== undefined) {
+        sheet.getRange(i + 1, 7, 1, 3).setValues([[
+          payload.content !== undefined ? payload.content : data[i][6],
+          payload.homework !== undefined ? payload.homework : data[i][7],
+          payload.notes !== undefined ? payload.notes : data[i][8]
+        ]]);
       }
-      
-      // Update Content ALWAYS if provided (Supervisor correction)
-      if (payload.content !== undefined) sheet.getRange(i + 1, 7).setValue(payload.content);
-      if (payload.homework !== undefined) sheet.getRange(i + 1, 8).setValue(payload.homework);
-      if (payload.notes !== undefined) sheet.getRange(i + 1, 9).setValue(payload.notes); 
         
       // Update Attendance if provided
       if (payload.updates && payload.updates.length > 0) {
            const attSheet = ss.getSheetByName("Attendance");
            const attData = attSheet.getDataRange().getValues();
-           const updates = payload.updates;
            
-           updates.forEach(upd => {
-             let found = false;
-             // Try to find existing row
-             for(let k=1; k<attData.length; k++) {
-               // Match by LogID and StudentID
-               if (String(attData[k][1]) === String(payload.logId) && String(attData[k][2]) === String(upd.studentId)) {
-                  // Update Status and Note
-                  attSheet.getRange(k+1, 4).setValue(upd.status);
-                  attSheet.getRange(k+1, 5).setValue(upd.note);
-                  found = true;
-                  break;
-               }
-             }
+           // FIX: بناء index أولاً بدل البحث المتكرر داخل forEach
+           const attIndex = {}; // "logId_studId" -> rowIndex
+           for (let k = 1; k < attData.length; k++) {
+             attIndex[attData[k][1] + "_" + attData[k][2]] = k + 1; // 1-based
+           }
+           
+           const newAttRows = [];
+           
+           payload.updates.forEach(upd => {
+             const key = String(payload.logId) + "_" + String(upd.studentId);
+             const existingRow = attIndex[key];
              
-             // If not found, append
-             if (!found) {
-                attSheet.appendRow([
+             if (existingRow) {
+                // FIX: كتابة الحقلين في Range واحد
+                attSheet.getRange(existingRow, 4, 1, 2).setValues([[upd.status, upd.note || ""]]);
+             } else {
+                newAttRows.push([
                   "A_" + Math.floor(Math.random()*1000000),
                   payload.logId,
                   upd.studentId,
                   upd.status,
-                  upd.note,
+                  upd.note || "",
                   new Date()
                 ]);
              }
            });
+           
+           // Batch append new rows
+           if (newAttRows.length > 0) {
+             attSheet.getRange(attSheet.getLastRow()+1, 1, newAttRows.length, newAttRows[0].length).setValues(newAttRows);
+           }
       }
       
       return { success: true, message: "Log " + payload.status };
@@ -1202,8 +1181,9 @@ function updateStudent(studentId, name, parentPhone) {
     
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(studentId)) {
-        sheet.getRange(i + 1, 2).setValue(name);
-        if (parentPhone !== undefined) sheet.getRange(i + 1, 3).setValue(parentPhone || "");
+        // FIX: كتابة Name + ParentPhone في batch واحد بدل setValue منفردة
+        const newPhone = parentPhone !== undefined ? (parentPhone || "") : data[i][2];
+        sheet.getRange(i + 1, 2, 1, 2).setValues([[name, newPhone]]);
         _invalidateDataCaches();
         return { success: true, message: "تم تحديث بيانات الطالب بنجاح" };
       }
@@ -1377,20 +1357,25 @@ function updateParent(currentPhone, newName, newPhone, newPassword) {
     let parentFound = false;
     for (let i = 1; i < data.length; i++) {
       if (normalizePhone(data[i][3]) === normalizedCurrent && data[i][2] === 'Parent') {
-        sheet.getRange(i + 1, 2).setValue(newName);
-        sheet.getRange(i + 1, 4).setValue(newPhone);
-        if (newPassword && newPassword.trim() !== "") {
-           sheet.getRange(i + 1, 5).setValue(newPassword);
-        }
+        // FIX: كتابة Name + Phone (و Password إذا طلب) في batch
+        const newPass = (newPassword && newPassword.trim() !== "") ? newPassword : data[i][4];
+        // Cols: 1=ID, 2=Name, 3=Role, 4=Phone, 5=Pass, 6=Active
+        // setValues for cols 2-5 (Name, Role, Phone, Pass)
+        sheet.getRange(i + 1, 2, 1, 4).setValues([[newName, data[i][2], newPhone, newPass]]);
         
         if (normalizedCurrent !== normalizedNew) {
            const studSheet = ss.getSheetByName("Students");
            const studs = studSheet.getDataRange().getValues();
-           for(let j=1; j<studs.length; j++){
-              if(normalizePhone(studs[j][2]) === normalizedCurrent) {
-                 studSheet.getRange(j+1, 3).setValue(newPhone);
+           // تجميع الصفوف التي تحتاج تحديث وعمل batch update
+           const studUpdates = [];
+           for (let j = 1; j < studs.length; j++) {
+              if (normalizePhone(studs[j][2]) === normalizedCurrent) {
+                studUpdates.push({ rowIndex: j + 1 });
               }
            }
+           studUpdates.forEach(u => {
+             studSheet.getRange(u.rowIndex, 3).setValue(newPhone);
+           });
         }
         parentFound = true;
         break;
