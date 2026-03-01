@@ -1,4 +1,4 @@
-const Parent = {
+﻿const Parent = {
     async init() {
         UI.loader(true);
         try {
@@ -18,12 +18,15 @@ const Parent = {
                                     </div>
                                 </div>
                             </div>
-                            <div class="flex gap-2 mt-2 pt-2 border-t border-gray-50">
-                                 <button onclick="Parent.openReportModal('${child.id}', '${child.name}')" class="flex-1 bg-emerald-50 text-emerald-700 py-2 rounded-lg text-sm font-bold hover:bg-emerald-100 transition flex items-center justify-center gap-2 relative">
+                            <div class="flex gap-2 mt-2 pt-2 border-t border-gray-50 flex-wrap">
+                                 <button onclick="Parent.openReportModal('${child.id}', '${child.name}')" class="flex-1 min-w-[100px] bg-emerald-50 text-emerald-700 py-2 rounded-lg text-sm font-bold hover:bg-emerald-100 transition flex items-center justify-center gap-2 relative">
                                     <i class="fas fa-calendar-alt"></i> المتابعة اليومية
                                     ${child.notificationCount > 0 ? `<span class="absolute -top-2 -right-2 bg-emerald-600 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm font-bold animate-pulse">${child.notificationCount}</span>` : ''}
                                  </button>
-                                 <button onclick="Parent.openWarningsModal('${child.id}', '${child.name}')" class="flex-1 bg-red-50 text-red-700 py-2 rounded-lg text-sm font-bold hover:bg-red-100 transition flex items-center justify-center gap-2 relative">
+                                 <button onclick="Parent.openAssessmentsModal('${child.id}', '${child.name}')" class="flex-1 min-w-[100px] bg-purple-50 text-purple-700 py-2 rounded-lg text-sm font-bold hover:bg-purple-100 transition flex items-center justify-center gap-2">
+                                    <i class="fas fa-star"></i> التقييمات
+                                 </button>
+                                 <button onclick="Parent.openWarningsModal('${child.id}', '${child.name}')" class="flex-1 min-w-[100px] bg-red-50 text-red-700 py-2 rounded-lg text-sm font-bold hover:bg-red-100 transition flex items-center justify-center gap-2 relative">
                                     <i class="fas fa-exclamation-triangle"></i> الإنذارات
                                     ${child.warningCount > 0 ? `<span class="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm font-bold animate-pulse">${child.warningCount}</span>` : ''}
                                  </button>
@@ -354,6 +357,91 @@ const Parent = {
 
         } catch (e) {
             document.getElementById('warningsContent').innerHTML = `<div class="text-red-500 text-center p-4">${e.message}</div>`;
+        }
+    },
+
+    async openAssessmentsModal(studentId, name) {
+        const modal = document.createElement('div');
+        modal.id = 'modal-assessments';
+        modal.className = "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm fade-in";
+        modal.innerHTML = `
+            <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+                <div class="p-4 bg-purple-600 text-white flex justify-between items-center shadow-md">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl font-bold">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-lg">التقييمات الأسبوعية</h3>
+                            <p class="text-purple-100 text-xs">الطالب: ${name}</p>
+                        </div>
+                    </div>
+                    <button onclick="document.getElementById('modal-assessments').remove()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition"><i class="fas fa-times"></i></button>
+                </div>
+                <div id="assessmentsContent" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-slate-50">
+                    <div class="spinner mx-auto border-gray-300 border-t-purple-600 mt-10"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        try {
+            const res = await App.call('getStudentAssessments', { studentId });
+            const container = document.getElementById('assessmentsContent');
+
+            if (!res.success) throw new Error(res.message);
+
+            if (!res.subjects || res.subjects.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-gray-400 py-10">
+                        <i class="fas fa-star text-5xl mb-4 opacity-20"></i>
+                        <p class="font-bold">لا توجد تقييمات معتمدة بعد</p>
+                        <p class="text-xs mt-1 text-gray-400">ستظهر نتائج التقييمات هنا بعد موافقة المشرف</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = res.subjects.map(sub => {
+                const pct = sub.totalMax > 0 ? Math.round((sub.totalScore / sub.totalMax) * 100) : null;
+                const pctColor = pct === null ? 'text-gray-500' : pct >= 70 ? 'text-emerald-600' : pct >= 50 ? 'text-yellow-600' : 'text-red-600';
+                const barColor = pct === null ? 'bg-gray-300' : pct >= 70 ? 'bg-emerald-500' : pct >= 50 ? 'bg-yellow-500' : 'bg-red-500';
+
+                return `
+                    <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+                        <div class="bg-purple-50 p-4 border-b border-purple-100">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-bold text-purple-800 text-lg">${sub.subjectName}</h4>
+                                <span class="font-bold text-sm ${pctColor}">${sub.totalScore} / ${sub.totalMax} ${pct !== null ? '(' + pct + '%)' : ''}</span>
+                            </div>
+                            <div class="w-full bg-purple-100 rounded-full h-2">
+                                <div class="${barColor} h-2 rounded-full transition-all" style="width: ${pct || 0}%"></div>
+                            </div>
+                        </div>
+                        <div class="divide-y divide-gray-50">
+                            ${sub.exams.map(ex => {
+                    const exPct = ex.max > 0 && ex.score !== null ? Math.round((ex.score / ex.max) * 100) : null;
+                    const exColor = exPct === null ? 'text-gray-400' : exPct >= 70 ? 'text-emerald-600' : exPct >= 50 ? 'text-yellow-600' : 'text-red-600';
+                    return `
+                                    <div class="p-3 flex justify-between items-center hover:bg-gray-50">
+                                        <div>
+                                            <p class="font-bold text-gray-700 text-sm">${ex.title}</p>
+                                            <p class="text-xs text-gray-400">${ex.date}${ex.comment ? ' • ' + ex.comment : ''}</p>
+                                        </div>
+                                        <div class="text-left">
+                                            <span class="font-bold ${exColor} text-sm">${ex.score !== null ? ex.score : '-'}</span>
+                                            <span class="text-xs text-gray-400"> / ${ex.max}</span>
+                                        </div>
+                                    </div>
+                                `;
+                }).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+        } catch (e) {
+            document.getElementById('assessmentsContent').innerHTML = `<div class="text-red-500 text-center p-4">${e.message}</div>`;
         }
     }
 };

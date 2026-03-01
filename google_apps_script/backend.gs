@@ -34,14 +34,15 @@ function doPost(e) {
     else if (action === "adminBulkUpdateEnrollments") result = adminBulkUpdateEnrollments(payload);
 
     else if (action === "getAdminActivity") result = getAdminActivity(payload.classId, payload.date);
-    // Cached Lookups
-    else if (action === "getAdminLookups") result = getAdminLookupsCached();
+    // Lookups
+    else if (action === "getAdminLookups") result = getAdminLookups();
     
     // Admin Stats
-    else if (action === "getAdminStats") result = getAdminStatsCached();
+    else if (action === "getAdminStats") result = getAdminStats();
     
     // Supervisor Review
-    else if (action === "getPendingLogs") result = getPendingLogs();
+    else if (action === "getPendingLogs") result = getPendingLogs(false);
+    else if (action === "getPendingLogsAdmin") result = getPendingLogs(true);
     else if (action === "reviewLog") result = reviewLog(payload);
     
     // Student & Parent Management
@@ -68,7 +69,13 @@ function doPost(e) {
     else if (action === "deleteWarning") result = deleteWarning(payload.warningId);
 
     else if (action === "getAnnouncements") result = { success: true, news: [] };
-    else if (action === "createExam") result = { success: false, message: "Feature Disabled" };
+
+    // Weekly Assessments Module
+    else if (action === "saveAssessments") result = saveAssessments(payload);
+    else if (action === "getAssessmentsForReview") result = getAssessmentsForReview(payload.classIds);
+    else if (action === "reviewAssessments") result = reviewAssessments(payload);
+    else if (action === "getStudentAssessments") result = getStudentAssessments(payload.studentId);
+    else if (action === "getTeacherAssessmentHistory") result = getTeacherAssessmentHistory(payload.userId);
     
     else result = { success: false, message: "Unknown Action: " + action };
     
@@ -545,15 +552,6 @@ function getTeacherLogHistory(userId) {
 // 4. ADMIN MODULE (FULL CRUD)
 // ==========================================
 
-// CACHED VERSION - 30 minute cache for lookups (invalidated on writes via _invalidateCache)
-function getAdminLookupsCached() {
-  const cached = _getFromCache("admin_lookups_v2");
-  if (cached) return cached;
-  const res = getAdminLookups();
-  _saveToCache("admin_lookups_v2", res, 1800); // 30 minutes
-  return res;
-}
-
 function getAdminLookups() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
@@ -574,14 +572,6 @@ function getAdminLookups() {
   const studList = studs.slice(1).map(r => ({ id: r[0], name: r[1] }));
   
   return { success: true, teachers, classes: classList, subjects: subList, students: studList };
-}
-
-function getAdminStatsCached() {
-    const cached = _getFromCache("admin_stats");
-    if (cached) return cached;
-    const res = getAdminStats();
-    _saveToCache("admin_stats", res, 600); // 10 mins
-    return res;
 }
 
 function getAdminStats() {
@@ -686,7 +676,12 @@ function getAdminActivity(classId, dateStr) {
   return { success: true, logs: mappedLogs, notes: notes };
 }
 
-function getPendingLogs() {
+/**
+ * getPendingLogs(isAdmin)
+ * - isAdmin=false (Supervisor): returns only 'Pending' logs (supervisor filters client-side by class)
+ * - isAdmin=true  (Admin):      returns 'Pending' + 'SupervisorApproved' logs (admin does final approval)
+ */
+function getPendingLogs(isAdmin) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const logsSheet = ss.getSheetByName("Daily_Logs");
   const data = logsSheet.getDataRange().getValues();
@@ -698,53 +693,51 @@ function getPendingLogs() {
 
   const pending = [];
   
-  // 1. Get Pending Logs
-  // Start from 1 to skip header
+  // Statuses to include
+  // Supervisor: sees 'Pending' only
+  // Admin: sees both 'Pending' (not yet touched by supervisor) AND 'SupervisorApproved' (approved by supervisor, awaiting admin)
+  const allowedStatuses = isAdmin
+    ? new Set(['Pending', 'SupervisorApproved'])
+    : new Set(['Pending']);
+  
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    // Logs Schema: [0:ID, 1:Date, 2:Class, 3:Subj, 4:Teacher, 5:Term, 6:Content, 7:HW, 8:Notes, 9:Time, 10:Status]
-    if (row[10] === 'Pending') {
+    // Logs Schema: [0:ID, 1:Date, 2:Class, 3:Subj, 4:Teacher, 5:Term, 6:Content, 7:HW, 8:Notes, 9:Time, 10:Status, 11:SupervisorNote]
+    if (allowedStatuses.has(row[10])) {
       pending.push({
         id: row[0],
         date: new Date(row[1]).toISOString().split('T')[0],
-        classId: row[2], // Added ID for editing
+        classId: row[2],
         className: classMap[row[2]] || row[2],
         subjectName: subMap[row[3]] || row[3],
         teacherName: userMap[row[4]] || row[4],
         content: row[6],
         homework: row[7],
         notes: row[8],
-        attendance: [] // Populated below
+        reviewStatus: row[10],          // 'Pending' or 'SupervisorApproved'
+        supervisorNote: row[11] || '',   // Note left by supervisor
+        attendance: []
       });
     }
   }
 
-  // 2. Attach Attendance Data
+  // Attach Attendance Data
   if (pending.length > 0) {
       const attSheet = ss.getSheetByName("Attendance");
       const attData = attSheet.getDataRange().getValues();
       const studMap = {}; ss.getSheetByName("Students").getDataRange().getValues().forEach(r => studMap[r[0]] = r[1]);
 
-      const logIds = pending.map(p => p.id);
+      const logIds = new Set(pending.map(p => String(p.id)));
       
-      // Iterate Attendance
       for (let i = 1; i < attData.length; i++) {
-        // Att Schema: [AttID, LogID, StudID, Status, Note, Time]
         const lId = attData[i][1];
-        if (logIds.includes(lId)) {
-           const pLog = pending.find(p => p.id === lId);
+        if (logIds.has(String(lId))) {
+           const pLog = pending.find(p => String(p.id) === String(lId));
            if (pLog) {
-             // Only add if interesting (Absent or Note) OR we might want ALL for editing?
-             // User wants to edit "everything". Let's send non-Present items or just fetch all?
-             // Fetching ALL for editing is safer but heavier. 
-             // Let's send items that exist in Attendance table. 
-             // Note: Attendance table usually only has rows for exceptions if we optimized? 
-             // Current saveDailyLog saves for submitted students.
-             
              pLog.attendance.push({
                attId: attData[i][0],
                studentId: attData[i][2],
-               studentName: studMap[attData[i][2]] || "Unknown",
+               studentName: studMap[attData[i][2]] || 'Unknown',
                status: attData[i][3],
                note: attData[i][4]
              });
@@ -1657,3 +1650,259 @@ function getSupervisorData(userId) {
     }
   };
 }
+
+
+// ==========================================
+// 8. WEEKLY ASSESSMENTS MODULE
+// ==========================================
+
+/**
+ * saveAssessments(payload)
+ * payload: { teacherId, classId, subjectId, title, date, maxScore, students: [{id, score, comment}] }
+ * Each call = one assessment "batch" (one subject session for a class)
+ */
+function saveAssessments(payload) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("Weekly_Assessments");
+
+  // Auto-init sheet if missing
+  if (!sheet) {
+    sheet = ss.insertSheet("Weekly_Assessments");
+    sheet.appendRow(["ID", "Date", "ClassID", "SubjectID", "TeacherID", "StudentID", "Score", "MaxScore", "Title", "Comment", "Status", "Timestamp"]);
+  }
+
+  if (!payload.title || !payload.date || !payload.classId || !payload.subjectId || !payload.students || !payload.students.length) {
+    return { success: false, message: "بيانات ناقصة" };
+  }
+
+  const batchId = "A_" + Date.now(); // Shared batch prefix
+  const date = new Date(payload.date);
+  const now = new Date();
+  const maxScore = parseFloat(payload.maxScore) || 0;
+
+  // Check for existing batch for same class/subject/date/title - delete old to allow re-save
+  const existing = sheet.getDataRange().getValues();
+  const toDeleteRows = [];
+  const sDate = date.toDateString();
+  for (let i = 1; i < existing.length; i++) {
+    const r = existing[i];
+    if (String(r[2]) === String(payload.classId) &&
+        String(r[3]) === String(payload.subjectId) &&
+        String(r[8]) === String(payload.title) &&
+        new Date(r[1]).toDateString() === sDate) {
+      toDeleteRows.push(i + 1); // 1-based
+    }
+  }
+  // Delete rows in reverse order
+  for (let i = toDeleteRows.length - 1; i >= 0; i--) {
+    sheet.deleteRow(toDeleteRows[i]);
+  }
+
+  // Insert new rows (batch)
+  const newRows = payload.students.map((s, idx) => [
+    batchId + "_" + idx,
+    date,
+    payload.classId,
+    payload.subjectId,
+    payload.teacherId,
+    s.id,
+    s.score === "" || s.score === null || s.score === undefined ? "" : parseFloat(s.score),
+    maxScore,
+    payload.title,
+    s.comment || "",
+    "Pending",
+    now
+  ]);
+
+  if (newRows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
+  }
+
+  return { success: true, message: "تم حفظ التقييمات بنجاح" };
+}
+
+/**
+ * getAssessmentsForReview(classIds)
+ * Returns pending assessment batches for supervisor/admin review.
+ * classIds: array of allowed class IDs (empty = show all for admin)
+ */
+function getAssessmentsForReview(classIds) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Weekly_Assessments");
+  if (!sheet || sheet.getLastRow() < 2) return { success: true, batches: [] };
+
+  const data = sheet.getDataRange().getValues();
+  const allowedIds = classIds && classIds.length > 0 ? classIds.map(String) : null;
+
+  // Helpers
+  const classMap = {};
+  ss.getSheetByName("Classes").getDataRange().getValues().forEach(r => classMap[r[0]] = r[1] + (r[2] ? " - " + r[2] : ""));
+  const subMap = {};
+  ss.getSheetByName("Subjects").getDataRange().getValues().forEach(r => subMap[r[0]] = r[1]);
+  const teacherMap = {};
+  ss.getSheetByName("Users").getDataRange().getValues().forEach(r => teacherMap[r[0]] = r[1]);
+  const studMap = {};
+  ss.getSheetByName("Students").getDataRange().getValues().forEach(r => studMap[r[0]] = r[1]);
+
+  // Group by (ClassID + SubjectID + Title + Date)
+  const batchMap = {};
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    // Schema: [ID, Date, ClassID, SubjectID, TeacherID, StudentID, Score, MaxScore, Title, Comment, Status, Timestamp]
+    if (r[10] !== "Pending") continue;
+    if (allowedIds && !allowedIds.includes(String(r[2]))) continue;
+
+    const key = r[2] + "_" + r[3] + "_" + r[8] + "_" + new Date(r[1]).toDateString();
+    if (!batchMap[key]) {
+      batchMap[key] = {
+        batchKey: key,
+        date: new Date(r[1]).toISOString().split("T")[0],
+        classId: r[2],
+        className: classMap[r[2]] || r[2],
+        subjectId: r[3],
+        subjectName: subMap[r[3]] || r[3],
+        teacherId: r[4],
+        teacherName: teacherMap[r[4]] || r[4],
+        title: r[8],
+        maxScore: r[7],
+        students: [],
+        status: "Pending"
+      };
+    }
+    batchMap[key].students.push({
+      studentId: r[5],
+      studentName: studMap[r[5]] || r[5],
+      score: r[6],
+      comment: r[9]
+    });
+  }
+
+  return { success: true, batches: Object.values(batchMap) };
+}
+
+/**
+ * reviewAssessments(payload)
+ * payload: { classId, subjectId, title, date, status ('Approved'/'Rejected') }
+ * Updates all rows matching the batch key.
+ */
+function reviewAssessments(payload) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Weekly_Assessments");
+  if (!sheet) return { success: false, message: "Sheet not found" };
+
+  const data = sheet.getDataRange().getValues();
+  const targetDate = new Date(payload.date).toDateString();
+  let updated = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (String(r[2]) === String(payload.classId) &&
+        String(r[3]) === String(payload.subjectId) &&
+        String(r[8]) === String(payload.title) &&
+        new Date(r[1]).toDateString() === targetDate) {
+      sheet.getRange(i + 1, 11).setValue(payload.status);
+      updated++;
+    }
+  }
+
+  return { success: true, updated };
+}
+
+/**
+ * getStudentAssessments(studentId)
+ * Returns approved assessments for a student, grouped by subject.
+ */
+function getStudentAssessments(studentId) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Weekly_Assessments");
+  if (!sheet || sheet.getLastRow() < 2) return { success: true, subjects: [] };
+
+  const data = sheet.getDataRange().getValues();
+  const sId = String(studentId);
+
+  const subMap = {};
+  ss.getSheetByName("Subjects").getDataRange().getValues().forEach(r => subMap[r[0]] = r[1]);
+
+  const grouped = {}; // subjectId → { subjectName, exams: [] }
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    // Only approved, and only for this student
+    if (String(r[5]) !== sId) continue;
+    if (r[10] !== "Approved") continue;
+
+    const subId = r[3];
+    if (!grouped[subId]) {
+      grouped[subId] = {
+        subjectId: subId,
+        subjectName: subMap[subId] || subId,
+        exams: [],
+        totalScore: 0,
+        totalMax: 0
+      };
+    }
+    const score = r[6] !== "" && r[6] !== null ? parseFloat(r[6]) : null;
+    const max = parseFloat(r[7]) || 0;
+    grouped[subId].exams.push({
+      title: r[8],
+      date: new Date(r[1]).toISOString().split("T")[0],
+      score: score,
+      max: max,
+      comment: r[9] || ""
+    });
+    if (score !== null) grouped[subId].totalScore += score;
+    grouped[subId].totalMax += max;
+  }
+
+  // Sort exams by date desc
+  Object.values(grouped).forEach(sub => {
+    sub.exams.sort((a, b) => new Date(b.date) - new Date(a.date));
+  });
+
+  return { success: true, subjects: Object.values(grouped) };
+}
+
+/**
+ * getTeacherAssessmentHistory(userId)
+ * Returns all assessment batches saved by this teacher (any status).
+ */
+function getTeacherAssessmentHistory(userId) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Weekly_Assessments");
+  if (!sheet || sheet.getLastRow() < 2) return { success: true, batches: [] };
+
+  const data = sheet.getDataRange().getValues();
+  const sUserId = String(userId);
+
+  const classMap = {};
+  ss.getSheetByName("Classes").getDataRange().getValues().forEach(r => classMap[r[0]] = r[1] + (r[2] ? " - " + r[2] : ""));
+  const subMap = {};
+  ss.getSheetByName("Subjects").getDataRange().getValues().forEach(r => subMap[r[0]] = r[1]);
+  const studMap = {};
+  ss.getSheetByName("Students").getDataRange().getValues().forEach(r => studMap[r[0]] = r[1]);
+
+  const batchMap = {};
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (String(r[4]) !== sUserId) continue;
+
+    const key = r[2] + "_" + r[3] + "_" + r[8] + "_" + new Date(r[1]).toDateString();
+    if (!batchMap[key]) {
+      batchMap[key] = {
+        date: new Date(r[1]).toISOString().split("T")[0],
+        classId: r[2],
+        className: classMap[r[2]] || r[2],
+        subjectId: r[3],
+        subjectName: subMap[r[3]] || r[3],
+        title: r[8],
+        maxScore: r[7],
+        status: r[10],
+        studentCount: 0
+      };
+    }
+    batchMap[key].studentCount++;
+  }
+
+  const batches = Object.values(batchMap).sort((a, b) => new Date(b.date) - new Date(a.date));
+  return { success: true, batches };
+}
+

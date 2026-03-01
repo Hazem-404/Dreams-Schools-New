@@ -68,6 +68,7 @@ const Admin = {
         if (tab === 'Warnings') return this.renderWarnings();
         if (tab === 'StudentsManagement') return this.renderStudentsManagement();
         if (tab === 'ParentsManagement') return this.renderParentsManagement();
+        if (tab === 'AssessReviews') return this.renderAssessReviews();
 
         // Load Data Table with client-side cache
         try {
@@ -114,10 +115,18 @@ const Admin = {
         const content = document.getElementById('dashboardContent');
         let filterHtml = '';
 
+        const searchBox = `
+            <div class="relative flex-grow min-w-[180px]">
+                <i class="fas fa-search absolute right-3 top-3 text-gray-400 text-sm"></i>
+                <input type="text" id="globalSearch" oninput="Admin.applyFilters()" placeholder="بحث..." 
+                    class="w-full pr-9 pl-3 py-2 border rounded-lg text-sm outline-none focus:border-emerald-500 bg-gray-50">
+            </div>
+        `;
+
         if (tab === 'Users') {
             filterHtml = `
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex gap-4 items-center">
-                    <span class="font-bold text-gray-700 text-sm"><i class="fas fa-filter text-emerald-500 ml-2"></i>تصفية حسب:</span>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex flex-wrap gap-3 items-center">
+                    <span class="font-bold text-gray-700 text-sm"><i class="fas fa-filter text-emerald-500 ml-2"></i>تصفية:</span>
                     <select id="filterStart" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
                         <option value="">كل الأدوار</option>
                         <option value="Teacher">معلم</option>
@@ -125,46 +134,49 @@ const Admin = {
                         <option value="Supervisor">مشرف</option>
                         <option value="Admin">إدارة</option>
                     </select>
+                    ${searchBox}
                 </div>
                 <div id="tableContainer"></div>
             `;
         } else if (tab === 'Allocations') {
-            // Allocations: [ID, TeacherID, ClassID, SubjectID]
             filterHtml = `
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex flex-wrap gap-4 items-center">
-                    <span class="font-bold text-gray-700 text-sm"><i class="fas fa-filter text-emerald-500 ml-2"></i>تصفية حسب:</span>
-                    
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex flex-wrap gap-3 items-center">
+                    <span class="font-bold text-gray-700 text-sm"><i class="fas fa-filter text-emerald-500 ml-2"></i>تصفية:</span>
                     <select id="filterClass" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
                         <option value="">كل الفصول</option>
                         ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
                     </select>
-
                     <select id="filterSubject" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
                         <option value="">كل المواد</option>
                         ${this.lookups.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
                     </select>
-
                     <select id="filterTeacher" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
                         <option value="">كل المعلمين</option>
                         ${this.lookups.teachers.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
                     </select>
-                </div>
+                    ${searchBox}
                 </div>
                 <div id="tableContainer"></div>
             `;
         } else if (tab === 'Enrollments') {
             filterHtml = `
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex flex-wrap gap-4 items-center">
-                    <span class="font-bold text-gray-700 text-sm"><i class="fas fa-filter text-emerald-500 ml-2"></i>تصفية حسب:</span>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex flex-wrap gap-3 items-center">
+                    <span class="font-bold text-gray-700 text-sm"><i class="fas fa-filter text-emerald-500 ml-2"></i>تصفية:</span>
                     <select id="filterClass" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
                         <option value="">كل الفصول</option>
                         ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
                     </select>
+                    ${searchBox}
                 </div>
                 <div id="tableContainer"></div>
             `;
         } else {
-            filterHtml = `<div id="tableContainer"></div>`;
+            filterHtml = `
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 mb-4 flex gap-3 items-center">
+                    ${searchBox}
+                </div>
+                <div id="tableContainer"></div>
+            `;
         }
 
         // Add Bulk Action Bar (Hidden by default)
@@ -185,27 +197,37 @@ const Admin = {
     applyFilters() {
         const tab = this.currentTab;
         let filtered = this.allData;
+        const searchQuery = (document.getElementById('globalSearch')?.value || '').toLowerCase().trim();
 
         if (tab === 'Users') {
             const role = document.getElementById('filterStart') ? document.getElementById('filterStart').value : '';
-            if (role) {
-                // Role is at Index 2
-                filtered = filtered.filter(row => row[2] === role);
-            }
+            if (role) filtered = filtered.filter(row => row[2] === role);
         } else if (tab === 'Allocations') {
             const classId = document.getElementById('filterClass') ? document.getElementById('filterClass').value : '';
             const subId = document.getElementById('filterSubject') ? document.getElementById('filterSubject').value : '';
             const teacherId = document.getElementById('filterTeacher') ? document.getElementById('filterTeacher').value : '';
-
-
-            // Allocations: [ID, TeacherID, ClassID, SubjectID, Year]
             if (classId) filtered = filtered.filter(row => String(row[2]) === String(classId));
             if (subId) filtered = filtered.filter(row => String(row[3]) === String(subId));
             if (teacherId) filtered = filtered.filter(row => String(row[1]) === String(teacherId));
         } else if (tab === 'Enrollments') {
             const classId = document.getElementById('filterClass') ? document.getElementById('filterClass').value : '';
-            // Enrollments: [ID, StudentID, ClassID]
             if (classId) filtered = filtered.filter(row => String(row[2]) === String(classId));
+        }
+
+        // Global text search: resolve IDs to names then match
+        if (searchQuery) {
+            filtered = filtered.filter(row => {
+                return row.some((cell, i) => {
+                    let val = String(cell || '').toLowerCase();
+                    // Try to resolve IDs to names for better search
+                    if (tab === 'Allocations' && i === 1) val = this.getName(this.lookups.teachers, cell).toLowerCase();
+                    if (tab === 'Allocations' && i === 2) val = this.getName(this.lookups.classes, cell).toLowerCase();
+                    if (tab === 'Allocations' && i === 3) val = this.getName(this.lookups.subjects, cell).toLowerCase();
+                    if (tab === 'Enrollments' && i === 1) val = this.getName(this.lookups.students, cell).toLowerCase();
+                    if (tab === 'Enrollments' && i === 2) val = this.getName(this.lookups.classes, cell).toLowerCase();
+                    return val.includes(searchQuery);
+                });
+            });
         }
 
         this.renderTable(tab, this.currentHeader, filtered);
@@ -853,7 +875,7 @@ const Admin = {
         content.innerHTML = '<div class="spinner mx-auto border-gray-300 border-t-emerald-600 mt-10"></div>';
 
         try {
-            const res = await App.call('getPendingLogs');
+            const res = await App.call('getPendingLogsAdmin');
             if (!res.success) throw new Error(res.message);
 
             if (res.logs.length === 0) {
@@ -871,19 +893,41 @@ const Admin = {
 
             const html = `
                 <div class="space-y-4 animate-fadeIn">
-                    <h3 class="font-bold text-gray-700 text-lg mb-4 flex items-center">
-                        <i class="fas fa-clipboard-check text-emerald-600 ml-2"></i>سجلات بانتظار المراجعة
-                        <span class="mr-2 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full border border-emerald-200">${res.logs.length}</span>
-                    </h3>
-                    <div class="grid gap-4">
+                    <!-- Header + Batch Actions -->
+                    <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+                        <h3 class="font-bold text-gray-700 text-lg flex items-center">
+                            <i class="fas fa-clipboard-check text-emerald-600 ml-2"></i>سجلات بانتظار المراجعة
+                            <span class="mr-2 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full border border-emerald-200">${res.logs.length}</span>
+                        </h3>
+                        <div class="flex gap-2 flex-wrap">
+                            <label class="flex items-center gap-2 cursor-pointer bg-white border border-gray-200 px-3 py-2 rounded-lg font-bold text-sm text-gray-600 hover:bg-gray-50 transition">
+                                <input type="checkbox" id="selectAllAdminLogs" onchange="Admin._toggleSelectAllLogs(this)" class="w-4 h-4 accent-emerald-600">
+                                تحديد الكل
+                            </label>
+                            <button onclick="Admin.batchReviewSelectedLogs('Approved')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm text-sm">
+                                <i class="fas fa-check-double ml-1"></i>موافقة على المحدد
+                            </button>
+                            <button onclick="Admin.batchReviewSelectedLogs('Rejected')" class="bg-red-50 text-red-600 px-4 py-2 rounded-lg font-bold hover:bg-red-100 transition border border-red-200 text-sm">
+                                <i class="fas fa-times ml-1"></i>رفض المحدد
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="adminReviewLogsList" class="grid gap-4">
                         ${res.logs.map(log => `
-                            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition">
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition" id="adminLogCard_${log.id}">
                                 <div class="flex justify-between items-start mb-3">
-                                    <div>
-                                        <h4 class="font-bold text-gray-800 text-lg">${log.className} - ${log.subjectName}</h4>
-                                        <p class="text-sm text-gray-500 font-bold"><i class="fas fa-user ml-1"></i> ${log.teacherName}</p>
+                                    <div class="flex items-start gap-3">
+                                        <input type="checkbox" class="admin-log-select-cb w-5 h-5 mt-1 accent-emerald-600 rounded" data-log-id="${log.id}">
+                                        <div>
+                                            <h4 class="font-bold text-gray-800 text-lg">${log.className} - ${log.subjectName}</h4>
+                                            <p class="text-sm text-gray-500 font-bold"><i class="fas fa-user ml-1"></i> ${log.teacherName}</p>
+                                        </div>
                                     </div>
-                                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold">${log.date}</span>
+                                    <div class="flex flex-col items-end gap-1">
+                                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold">${log.date}</span>
+                                        ${log.reviewStatus === 'SupervisorApproved' ? `<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-bold border border-emerald-200"><i class="fas fa-user-check ml-1"></i>وافق المشرف</span>` : `<span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-bold border border-amber-200"><i class="fas fa-clock ml-1"></i>بانتظار المشرف</span>`}
+                                    </div>
                                 </div>
                                 <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-3 space-y-2">
                                     <div>
@@ -901,15 +945,20 @@ const Admin = {
                                         <p class="text-sm text-gray-800">${log.notes}</p>
                                     </div>` : ''}
                                     
-                                    <!-- Attendance Summary -->
-                                    <div class="border-t border-gray-200 pt-2 flex gap-2">
-                                        <span class="bg-red-100 text-red-600 text-xs px-2 py-1 rounded font-bold">
-                                            غياب: ${log.attendance.filter(a => a.status === 'Absent').length}
-                                        </span>
-                                        <span class="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded font-bold">
-                                            ملاحظات طلاب: ${log.attendance.filter(a => a.note).length}
-                                        </span>
-                                    </div>
+                                    ${log.supervisorNote ? `
+                                    <div class="border-t border-emerald-200 pt-2 bg-emerald-50 p-2 rounded-lg">
+                                        <span class="text-xs font-bold text-emerald-700 block mb-1"><i class="fas fa-user-check ml-1"></i>ملاحظة المشرف:</span>
+                                        <p class="text-sm text-emerald-800">${log.supervisorNote}</p>
+                                    </div>` : ''}
+                                <!-- Attendance Summary -->
+                                <div class="border-t border-gray-200 pt-2 flex gap-2">
+                                    <span class="bg-red-100 text-red-600 text-xs px-2 py-1 rounded font-bold">
+                                        غياب: ${log.attendance.filter(a => a.status === 'Absent').length}
+                                    </span>
+                                    <span class="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded font-bold">
+                                        ملاحظات طلاب: ${log.attendance.filter(a => a.note).length}
+                                    </span>
+                                </div>
                                 </div>
                                 <div class="flex gap-3 mt-4">
                                     <button onclick="Admin.submitReview('${log.id}', 'Approved')" class="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm">
@@ -933,6 +982,36 @@ const Admin = {
 
         } catch (e) {
             content.innerHTML = `<div class="text-red-500 text-center p-10">${e.message}</div>`;
+        }
+    },
+
+    _toggleSelectAllLogs(source) {
+        document.querySelectorAll('.admin-log-select-cb').forEach(cb => cb.checked = source.checked);
+    },
+
+    async batchReviewSelectedLogs(status) {
+        const selectedIds = [...document.querySelectorAll('.admin-log-select-cb:checked')].map(cb => cb.dataset.logId);
+        if (selectedIds.length === 0) return UI.showError('لم تقم باختيار أي سجل');
+
+        const label = status === 'Approved' ? 'الموافقة' : 'الرفض';
+        if (!confirm(`هل أنت متأكد من ${label} على ${selectedIds.length} سجل؟`)) return;
+
+        UI.loader(true);
+        let successCount = 0;
+        for (const logId of selectedIds) {
+            try {
+                const res = await App.call('reviewLog', { logId, status });
+                if (res.success) {
+                    successCount++;
+                    const card = document.getElementById('adminLogCard_' + logId);
+                    if (card) card.remove();
+                }
+            } catch (e) { console.error(e); }
+        }
+        UI.loader(false);
+        UI.showError(`تم ${label} على ${successCount} سجل بنجاح`, 'green');
+        if (document.querySelectorAll('.admin-log-select-cb').length === 0) {
+            this.renderReviews();
         }
     },
 
@@ -1829,5 +1908,140 @@ const Admin = {
             }
         } catch (e) { alert(e.message); }
         UI.loader(false);
+    },
+
+    // ==============================
+    // ASSESSMENT REVIEWS (ADMIN)
+    // ==============================
+
+    async renderAssessReviews() {
+        const container = document.getElementById('dashboardContent');
+        container.innerHTML = '<div class="spinner mx-auto border-gray-300 border-t-purple-600 mt-10"></div>';
+
+        try {
+            // Admin sees ALL classes
+            const allClassIds = this.lookups.classes.map(c => String(c.id));
+            const res = await App.call('getAssessmentsForReview', { classIds: allClassIds });
+
+            if (!res.success) throw new Error(res.message);
+
+            if (!res.batches || res.batches.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-10 bg-white rounded-xl shadow-sm border border-gray-200">
+                        <div class="bg-purple-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-purple-500">
+                            <i class="fas fa-check text-4xl"></i>
+                        </div>
+                        <h3 class="font-bold text-gray-700 text-lg">لا توجد تقييمات للمراجعة</h3>
+                        <p class="text-gray-500 text-sm">كل التقييمات تمت مراجعتها!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="space-y-4 animate-fadeIn">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-gray-700 text-lg flex items-center">
+                            <i class="fas fa-star text-purple-600 ml-2"></i>تقييمات بانتظار المراجعة
+                            <span class="mr-2 bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full border border-purple-200">${res.batches.length}</span>
+                        </h3>
+                        <button onclick="Admin._batchReviewAssessments('Approved')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm text-sm">
+                            <i class="fas fa-check-double ml-1"></i>موافقة على الكل
+                        </button>
+                    </div>
+                    <div class="grid gap-4">
+                        ${res.batches.map(batch => {
+                const scored = batch.students.filter(s => s.score !== '' && s.score !== null);
+                const avg = scored.length ? (scored.reduce((sum, s) => sum + parseFloat(s.score), 0) / scored.length).toFixed(1) : '-';
+                const pct = (avg !== '-' && batch.maxScore) ? Math.round((avg / batch.maxScore) * 100) : null;
+                const pctColor = pct === null ? '' : pct >= 70 ? 'text-emerald-600' : pct >= 50 ? 'text-yellow-600' : 'text-red-600';
+                return `
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-purple-100 hover:shadow-md transition">
+                                <div class="flex justify-between items-start mb-3">
+                                    <div>
+                                        <h4 class="font-bold text-gray-800 text-lg">${batch.className} — ${batch.subjectName}</h4>
+                                        <p class="text-sm text-gray-500">
+                                            <i class="fas fa-user ml-1"></i>${UI.formatName(batch.teacherName)}
+                                            <span class="mx-2">•</span>
+                                            <i class="fas fa-tag ml-1 text-purple-500"></i><span class="text-purple-700 font-bold">${batch.title}</span>
+                                        </p>
+                                    </div>
+                                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold whitespace-nowrap">${batch.date}</span>
+                                </div>
+                                <div class="flex gap-4 mb-4 bg-purple-50 p-3 rounded-xl">
+                                    <div class="text-center">
+                                        <div class="text-lg font-bold text-purple-700">${batch.students.length}</div>
+                                        <div class="text-xs text-gray-500">طالب</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="text-lg font-bold ${pctColor}">${avg} / ${batch.maxScore}</div>
+                                        <div class="text-xs text-gray-500">متوسط الدرجات</div>
+                                    </div>
+                                    ${pct !== null ? `<div class="text-center"><div class="text-lg font-bold ${pctColor}">${pct}%</div><div class="text-xs text-gray-500">النسبة</div></div>` : ''}
+                                </div>
+                                <details class="mb-4">
+                                    <summary class="cursor-pointer text-xs font-bold text-purple-600 hover:underline">عرض درجات الطلاب</summary>
+                                    <div class="mt-2 max-h-48 overflow-y-auto custom-scrollbar">
+                                        ${batch.students.map(s => `
+                                            <div class="flex justify-between items-center p-2 border-b border-gray-50 text-sm">
+                                                <span class="font-bold text-gray-700">${UI.formatName(s.studentName)}</span>
+                                                <span class="font-bold ${parseFloat(s.score) >= batch.maxScore * 0.7 ? 'text-emerald-600' : 'text-red-500'}">
+                                                    ${s.score !== '' && s.score !== null ? s.score + ' / ' + batch.maxScore : 'لم يُدخل'}
+                                                </span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </details>
+                                <div class="flex gap-3">
+                                    <button onclick="Admin._reviewAssessmentBatch('${batch.classId}','${batch.subjectId}','${batch.title.replace(/'/g, "\\'")}','${batch.date}','Approved')"
+                                        class="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm text-sm">
+                                        <i class="fas fa-check ml-2"></i>موافقة
+                                    </button>
+                                    <button onclick="Admin._reviewAssessmentBatch('${batch.classId}','${batch.subjectId}','${batch.title.replace(/'/g, "\\'")}','${batch.date}','Rejected')"
+                                        class="flex-1 bg-red-50 text-red-600 py-2 rounded-lg font-bold hover:bg-red-100 transition border border-red-200 text-sm">
+                                        <i class="fas fa-times ml-2"></i>رفض
+                                    </button>
+                                </div>
+                            </div>`;
+            }).join('')}
+                    </div>
+                </div>
+            `;
+        } catch (e) {
+            container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold">${e.message}</div>`;
+        }
+    },
+
+    async _reviewAssessmentBatch(classId, subjectId, title, date, status) {
+        const label = status === 'Approved' ? 'الموافقة' : 'الرفض';
+        if (!confirm(`هل أنت متأكد من ${label} على هذا التقييم؟`)) return;
+        UI.loader(true);
+        try {
+            const res = await App.call('reviewAssessments', { classId, subjectId, title, date, status });
+            if (res.success) {
+                UI.showError(`تم ${label} على التقييم`, 'green');
+                this.renderAssessReviews();
+            } else { alert(res.message); }
+        } catch (e) { alert(e.message); }
+        UI.loader(false);
+    },
+
+    async _batchReviewAssessments(status) {
+        const label = status === 'Approved' ? 'الموافقة' : 'الرفض';
+        if (!confirm(`هل أنت متأكد من ${label} على جميع التقييمات المعلقة؟`)) return;
+        UI.loader(true);
+        try {
+            const allClassIds = this.lookups.classes.map(c => String(c.id));
+            const res = await App.call('getAssessmentsForReview', { classIds: allClassIds });
+            if (res.success) {
+                for (const batch of res.batches) {
+                    await App.call('reviewAssessments', { classId: batch.classId, subjectId: batch.subjectId, title: batch.title, date: batch.date, status });
+                }
+                UI.showError(`تم ${label} على ${res.batches.length} تقييم`, 'green');
+                this.renderAssessReviews();
+            }
+        } catch (e) { alert(e.message); }
+        UI.loader(false);
     }
 };
+

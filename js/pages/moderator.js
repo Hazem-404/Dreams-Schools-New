@@ -25,8 +25,14 @@ const Moderator = {
                 // permissions array: [{ type: 'Module', targetId: 'module_supervision' }, ...]
                 const allPerms = res.permissions || [];
                 const modulePerms = allPerms.filter(p => p.type === 'Module').map(p => p.targetId);
-                // If no module permissions saved, allow all (backward compatible)
-                this.allowedModules = modulePerms.length > 0 ? modulePerms : ['module_supervision', 'module_academic', 'module_people'];
+                // Admin always gets all modules — supervisor gets only their assigned ones
+                const isAdmin = App.user.role === 'Admin';
+                if (isAdmin) {
+                    this.allowedModules = ['module_supervision', 'module_academic', 'module_people', 'module_admin'];
+                } else {
+                    // If no module permissions saved, allow all (backward compatible)
+                    this.allowedModules = modulePerms.length > 0 ? modulePerms : ['module_supervision', 'module_academic', 'module_people'];
+                }
 
                 // Render Dashboard
                 this.renderDashboard();
@@ -49,12 +55,15 @@ const Moderator = {
         // Allocations → module_academic
         // ClassControl → module_supervision
         const tabs = [];
-        if (allowed.includes('module_supervision')) {
+        if (allowed.includes('module_supervision') || allowed.includes('module_admin')) {
             tabs.push(`<button onclick="Moderator.switchTab('Monitoring')" class="tab-btn bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold shadow-md transition" data-tab="Monitoring">
                 <i class="fas fa-chart-bar ml-2"></i>المتابعة اليومية
             </button>`);
             tabs.push(`<button onclick="Moderator.switchTab('Reviews')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="Reviews">
                 <i class="fas fa-check-double ml-2"></i>مراجعة السجلات
+            </button>`);
+            tabs.push(`<button onclick="Moderator.switchTab('AssessReviews')" class="tab-btn bg-white text-purple-600 hover:bg-purple-50 px-4 py-2 rounded-lg font-bold transition border border-purple-200" data-tab="AssessReviews">
+                <i class="fas fa-star ml-2"></i>مراجعة التقييمات
             </button>`);
             tabs.push(`<button onclick="Moderator.switchTab('ClassControl')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="ClassControl">
                 <i class="fas fa-edit ml-2"></i>تسجيل الحصص
@@ -63,7 +72,7 @@ const Moderator = {
                 <i class="fas fa-exclamation-triangle ml-2"></i>الإنذارات
             </button>`);
         }
-        if (allowed.includes('module_academic')) {
+        if (allowed.includes('module_academic') || allowed.includes('module_admin')) {
             tabs.push(`<button onclick="Moderator.switchTab('Allocations')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="Allocations">
                 <i class="fas fa-chalkboard-teacher ml-2"></i>توزيع المدرسين
             </button>`);
@@ -107,6 +116,7 @@ const Moderator = {
         else if (tab === 'Allocations') this.renderAllocations();
         else if (tab === 'ClassControl') this.renderClassControl();
         else if (tab === 'Warnings') this.renderWarnings();
+        else if (tab === 'AssessReviews') this.renderAssessReviews();
     },
 
     renderMonitoring() {
@@ -235,11 +245,11 @@ const Moderator = {
         try {
             const res = await App.call('getPendingLogs');
             if (res.success) {
-                // Filter Client Side
+                // Filter to supervisor's classes
                 const myClassIds = this.lookups.classes.map(c => String(c.id));
-                const myLogs = res.logs.filter(l => myClassIds.includes(String(l.classId)));
+                this._pendingLogs = res.logs.filter(l => myClassIds.includes(String(l.classId)));
 
-                if (myLogs.length === 0) {
+                if (this._pendingLogs.length === 0) {
                     container.innerHTML = `
                         <div class="text-center p-10 bg-white rounded-xl shadow-sm border border-gray-200">
                             <div class="bg-emerald-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-500">
@@ -252,13 +262,27 @@ const Moderator = {
                     return;
                 }
 
-                const html = `
+                const uniqueClasses = [...new Map(this._pendingLogs.map(l => [l.classId, { id: l.classId, name: l.className }])).values()];
+
+                container.innerHTML = `
                     <div class="space-y-4 animate-fadeIn">
+                        <!-- Filter Bar -->
+                        <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-wrap gap-3 items-center">
+                            <div class="relative flex-grow min-w-[160px]">
+                                <i class="fas fa-search absolute right-3 top-3 text-gray-400 text-sm"></i>
+                                <input type="text" id="reviewSearch" oninput="Moderator._filterReviews()" placeholder="بحث بالمعلم أو المحتوى..."
+                                    class="w-full pr-9 pl-3 py-2 border rounded-lg text-sm outline-none focus:border-emerald-500 bg-gray-50">
+                            </div>
+                            <select id="reviewClassFilter" onchange="Moderator._filterReviews()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
+                                <option value="">كل الفصول</option>
+                                ${uniqueClasses.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                            </select>
+                            <span id="reviewCount" class="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">${this._pendingLogs.length} سجل</span>
+                        </div>
                         <!-- Header + Batch Actions -->
-                        <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+                        <div class="flex flex-wrap justify-between items-center gap-3">
                             <h3 class="font-bold text-gray-700 text-lg flex items-center">
                                 <i class="fas fa-clipboard-check text-emerald-600 ml-2"></i>سجلات بانتظار المراجعة
-                                <span class="mr-2 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full border border-emerald-200">${myLogs.length}</span>
                             </h3>
                             <div class="flex gap-2 flex-wrap">
                                 <label class="flex items-center gap-2 cursor-pointer bg-white border border-gray-200 px-3 py-2 rounded-lg font-bold text-sm text-gray-600 hover:bg-gray-50 transition">
@@ -273,57 +297,10 @@ const Moderator = {
                                 </button>
                             </div>
                         </div>
-
-                        <div id="reviewLogsList" class="grid gap-4">
-                            ${myLogs.map(log => `
-                                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition" id="logCard_${log.id}">
-                                    <div class="flex justify-between items-start mb-3">
-                                        <div class="flex items-start gap-3">
-                                            <input type="checkbox" class="log-select-cb w-5 h-5 mt-1 accent-emerald-600 rounded" data-log-id="${log.id}">
-                                            <div>
-                                                <h4 class="font-bold text-gray-800 text-lg">${log.className} - ${log.subjectName}</h4>
-                                                <p class="text-sm text-gray-500 font-bold"><i class="fas fa-user ml-1"></i> ${UI.formatName(log.teacherName)}</p>
-                                            </div>
-                                        </div>
-                                        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold">${log.date}</span>
-                                    </div>
-                                    <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-3 space-y-2">
-                                        <div>
-                                            <span class="text-xs font-bold text-purple-600 block mb-1">المحتوى:</span>
-                                            <p class="text-sm text-gray-800">${log.content || '-'}</p>
-                                        </div>
-                                        ${log.homework ? `
-                                        <div class="border-t border-gray-200 pt-2">
-                                            <span class="text-xs font-bold text-orange-600 block mb-1">الواجب:</span>
-                                            <p class="text-sm text-gray-800">${log.homework}</p>
-                                        </div>` : ''}
-                                        <div class="border-t border-gray-200 pt-2 flex gap-2">
-                                            <span class="bg-red-100 text-red-600 text-xs px-2 py-1 rounded font-bold">
-                                                غياب: ${log.attendance.filter(a => a.status === 'Absent').length}
-                                            </span>
-                                            <span class="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded font-bold">
-                                                ملاحظات طلاب: ${log.attendance.filter(a => a.note).length}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="flex gap-3 mt-4">
-                                        <button onclick="Moderator.submitReview('${log.id}', 'Approved')" class="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm">
-                                            <i class="fas fa-check ml-2"></i>موافقة
-                                        </button>
-                                        <button onclick="Moderator.openReviewModal('${log.id}')" class="flex-1 bg-blue-50 text-blue-600 py-2 rounded-lg font-bold hover:bg-blue-100 transition border border-blue-200">
-                                            <i class="fas fa-edit ml-2"></i>تعديل
-                                        </button>
-                                        <button onclick="Moderator.submitReview('${log.id}', 'Rejected')" class="flex-1 bg-red-50 text-red-600 py-2 rounded-lg font-bold hover:bg-red-100 transition border border-red-200">
-                                            <i class="fas fa-times ml-2"></i>رفض
-                                        </button>
-                                    </div>
-                                    <textarea id="raw_data_${log.id}" class="hidden">${JSON.stringify(log)}</textarea>
-                                </div>
-                            `).join('')}
-                        </div>
+                        <div id="reviewLogsList" class="grid gap-4"></div>
                     </div>
                 `;
-                container.innerHTML = html;
+                this._renderReviewCards(this._pendingLogs);
             } else {
                 container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold">${res.message}</div>`;
             }
@@ -331,6 +308,72 @@ const Moderator = {
             console.error(e);
             container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold">حدث خطأ: ${e.message}</div>`;
         }
+    },
+
+    _filterReviews() {
+        if (!this._pendingLogs) return;
+        const q = (document.getElementById('reviewSearch')?.value || '').toLowerCase();
+        const classId = document.getElementById('reviewClassFilter')?.value || '';
+        let filtered = this._pendingLogs;
+        if (classId) filtered = filtered.filter(l => String(l.classId) === String(classId));
+        if (q) filtered = filtered.filter(l =>
+            (l.teacherName || '').toLowerCase().includes(q) ||
+            (l.className || '').toLowerCase().includes(q) ||
+            (l.content || '').toLowerCase().includes(q)
+        );
+        const countEl = document.getElementById('reviewCount');
+        if (countEl) countEl.textContent = `${filtered.length} سجل`;
+        this._renderReviewCards(filtered);
+    },
+
+    _renderReviewCards(logs) {
+        const list = document.getElementById('reviewLogsList');
+        if (!list) return;
+        if (!logs.length) {
+            list.innerHTML = '<div class="text-center p-8 text-gray-400 bg-white rounded-xl border">لا توجد نتائج</div>';
+            return;
+        }
+        list.innerHTML = logs.map(log => `
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition" id="logCard_${log.id}">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex items-start gap-3">
+                        <input type="checkbox" class="log-select-cb w-5 h-5 mt-1 accent-emerald-600 rounded" data-log-id="${log.id}">
+                        <div>
+                            <h4 class="font-bold text-gray-800 text-lg">${log.className} - ${log.subjectName}</h4>
+                            <p class="text-sm text-gray-500 font-bold"><i class="fas fa-user ml-1"></i> ${UI.formatName(log.teacherName)}</p>
+                        </div>
+                    </div>
+                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold">${log.date}</span>
+                </div>
+                <div class="bg-gray-50 p-3 rounded-lg border border-gray-100 mb-3 space-y-2">
+                    <div>
+                        <span class="text-xs font-bold text-purple-600 block mb-1">المحتوى:</span>
+                        <p class="text-sm text-gray-800">${log.content || '-'}</p>
+                    </div>
+                    ${log.homework ? `
+                    <div class="border-t border-gray-200 pt-2">
+                        <span class="text-xs font-bold text-orange-600 block mb-1">الواجب:</span>
+                        <p class="text-sm text-gray-800">${log.homework}</p>
+                    </div>` : ''}
+                    <div class="border-t border-gray-200 pt-2 flex gap-2">
+                        <span class="bg-red-100 text-red-600 text-xs px-2 py-1 rounded font-bold">غياب: ${log.attendance.filter(a => a.status === 'Absent').length}</span>
+                        <span class="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded font-bold">ملاحظات: ${log.attendance.filter(a => a.note).length}</span>
+                    </div>
+                </div>
+                <div class="flex gap-3 mt-4">
+                    <button onclick="Moderator.submitReview('${log.id}', 'SupervisorApproved')" class="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm">
+                        <i class="fas fa-check ml-2"></i>موافقة
+                    </button>
+                    <button onclick="Moderator.openReviewModal('${log.id}')" class="flex-1 bg-blue-50 text-blue-600 py-2 rounded-lg font-bold hover:bg-blue-100 transition border border-blue-200">
+                        <i class="fas fa-edit ml-2"></i>تعديل
+                    </button>
+                    <button onclick="Moderator.submitReview('${log.id}', 'Rejected')" class="flex-1 bg-red-50 text-red-600 py-2 rounded-lg font-bold hover:bg-red-100 transition border border-red-200">
+                        <i class="fas fa-times ml-2"></i>رفض
+                    </button>
+                </div>
+                <textarea id="raw_data_${log.id}" class="hidden">${JSON.stringify(log)}</textarea>
+            </div>
+        `).join('');
     },
 
     _toggleSelectAll(source) {
@@ -341,7 +384,7 @@ const Moderator = {
         const selectedIds = [...document.querySelectorAll('.log-select-cb:checked')].map(cb => cb.dataset.logId);
         if (selectedIds.length === 0) return UI.showError('لم تقم باختيار أي سجل');
 
-        const label = status === 'Approved' ? 'الموافقة' : 'الرفض';
+        const label = status === 'SupervisorApproved' ? 'الموافقة' : 'الرفض';
         if (!confirm(`هل أنت متأكد من ${label} على ${selectedIds.length} سجل؟`)) return;
 
         UI.loader(true);
@@ -621,7 +664,7 @@ const Moderator = {
                             note: row.querySelector('.rev-note').value
                         });
                     });
-                    Moderator.submitReview(logId, 'Approved', newContent, newHW, newNotes, updates, supNote);
+                    Moderator.submitReview(logId, 'SupervisorApproved', newContent, newHW, newNotes, updates, supNote);
                 }
             };
             this.showDynamicModal(modalParams);
@@ -645,7 +688,7 @@ const Moderator = {
 
             const res = await App.call('reviewLog', payload);
             if (res.success) {
-                UI.showError(status === 'Approved' ? "تمت الموافقة بنجاح" : "تم الرفض", "green");
+                UI.showError(status === 'Rejected' ? 'تم الرفض' : 'تم الإرسال للأدمن للموافقة النهائية', 'green');
                 this.closeDynamicModal();
                 this.renderReviews();
             } else {
@@ -830,15 +873,169 @@ const Moderator = {
     },
 
     async _deleteWarning(warningId) {
-        if (!confirm('هل أنت متأكد من حذف هذا الإنذار؟')) return;
+        if (!confirm('هل أنت متأكد من حذف هذا الإنذار نهائياً؟')) return;
         UI.loader(true);
         try {
             const res = await App.call('deleteWarning', { warningId });
             if (res.success) {
+                UI.showError('تم الحذف بنجاح', 'green');
                 const studentId = document.getElementById('modWarnStudent').value;
-                this._loadStudentWarnings(studentId);
+                if (studentId) this._loadStudentWarnings(studentId);
+            } else { alert(res.message); }
+        } catch (e) { alert(e.message); }
+        UI.loader(false);
+    },
+
+
+    // ==============================
+    // ASSESSMENT REVIEWS MODULE
+    // ==============================
+
+    async renderAssessReviews() {
+        const container = document.getElementById('modContent');
+        container.innerHTML = '<div class="spinner mx-auto border-gray-300 border-t-purple-600 mt-10"></div>';
+
+        try {
+            const myClassIds = this.lookups.classes.map(c => String(c.id));
+            const res = await App.call('getAssessmentsForReview', { classIds: myClassIds });
+
+            if (!res.success) throw new Error(res.message);
+
+            if (!res.batches || res.batches.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-10 bg-white rounded-xl shadow-sm border border-gray-200">
+                        <div class="bg-purple-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-purple-500">
+                            <i class="fas fa-check text-4xl"></i>
+                        </div>
+                        <h3 class="font-bold text-gray-700 text-lg">لا توجد تقييمات للمراجعة</h3>
+                        <p class="text-gray-500 text-sm">كل التقييمات تمت مراجعتها!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = `
+                <div class="space-y-4 animate-fadeIn">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-gray-700 text-lg flex items-center">
+                            <i class="fas fa-star text-purple-600 ml-2"></i>تقييمات بانتظار المراجعة
+                            <span class="mr-2 bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full border border-purple-200">${res.batches.length}</span>
+                        </h3>
+                        <div class="flex gap-2">
+                            <button onclick="Moderator._batchReviewAssessments('Approved')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm text-sm">
+                                <i class="fas fa-check-double ml-1"></i>موافقة على الكل
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="assessBatchList" class="grid gap-4">
+                        ${res.batches.map(batch => {
+                const scoredStudents = batch.students.filter(s => s.score !== '' && s.score !== null);
+                const avg = scoredStudents.length ? (scoredStudents.reduce((sum, s) => sum + parseFloat(s.score), 0) / scoredStudents.length).toFixed(1) : '-';
+                const pct = (avg !== '-' && batch.maxScore) ? Math.round((avg / batch.maxScore) * 100) : null;
+                const pctColor = pct === null ? '' : pct >= 70 ? 'text-emerald-600' : pct >= 50 ? 'text-yellow-600' : 'text-red-600';
+
+                return `
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-purple-100 hover:shadow-md transition" id="assessCard_${CSS.escape(batch.batchKey)}">
+                                <div class="flex justify-between items-start mb-3">
+                                    <div>
+                                        <h4 class="font-bold text-gray-800 text-lg">${batch.className} — ${batch.subjectName}</h4>
+                                        <p class="text-sm text-gray-500">
+                                            <i class="fas fa-user ml-1"></i>${UI.formatName(batch.teacherName)}
+                                            <span class="mx-2">•</span>
+                                            <i class="fas fa-tag ml-1 text-purple-500"></i><span class="text-purple-700 font-bold">${batch.title}</span>
+                                        </p>
+                                    </div>
+                                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-bold whitespace-nowrap">${batch.date}</span>
+                                </div>
+
+                                <div class="flex gap-4 mb-4 bg-purple-50 p-3 rounded-xl">
+                                    <div class="text-center">
+                                        <div class="text-lg font-bold text-purple-700">${batch.students.length}</div>
+                                        <div class="text-xs text-gray-500">طالب</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="text-lg font-bold ${pctColor}">${avg} / ${batch.maxScore}</div>
+                                        <div class="text-xs text-gray-500">متوسط الدرجات</div>
+                                    </div>
+                                    ${pct !== null ? `<div class="text-center">
+                                        <div class="text-lg font-bold ${pctColor}">${pct}%</div>
+                                        <div class="text-xs text-gray-500">النسبة</div>
+                                    </div>` : ''}
+                                </div>
+
+                                <!-- Student Preview (collapsed) -->
+                                <details class="mb-4">
+                                    <summary class="cursor-pointer text-xs font-bold text-purple-600 hover:underline">عرض درجات الطلاب</summary>
+                                    <div class="mt-2 max-h-48 overflow-y-auto custom-scrollbar">
+                                        ${batch.students.map(s => `
+                                            <div class="flex justify-between items-center p-2 border-b border-gray-50 text-sm">
+                                                <span class="font-bold text-gray-700">${UI.formatName(s.studentName)}</span>
+                                                <span class="font-bold ${parseFloat(s.score) >= batch.maxScore * 0.7 ? 'text-emerald-600' : 'text-red-500'}">
+                                                    ${s.score !== '' && s.score !== null ? s.score + ' / ' + batch.maxScore : 'لم يُدخل'}
+                                                </span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </details>
+
+                                <div class="flex gap-3">
+                                    <button onclick="Moderator._reviewAssessmentBatch('${batch.classId}','${batch.subjectId}','${batch.title.replace(/'/g, "\\'")}','${batch.date}','Approved')" 
+                                        class="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm text-sm">
+                                        <i class="fas fa-check ml-2"></i>موافقة
+                                    </button>
+                                    <button onclick="Moderator._reviewAssessmentBatch('${batch.classId}','${batch.subjectId}','${batch.title.replace(/'/g, "\\'")}','${batch.date}','Rejected')" 
+                                        class="flex-1 bg-red-50 text-red-600 py-2 rounded-lg font-bold hover:bg-red-100 transition border border-red-200 text-sm">
+                                        <i class="fas fa-times ml-2"></i>رفض
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+            }).join('')}
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+        } catch (e) {
+            container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold">${e.message}</div>`;
+        }
+    },
+
+    async _reviewAssessmentBatch(classId, subjectId, title, date, status) {
+        const label = status === 'Approved' ? 'الموافقة' : 'الرفض';
+        if (!confirm(`هل أنت متأكد من ${label} على هذا التقييم؟`)) return;
+
+        UI.loader(true);
+        try {
+            const res = await App.call('reviewAssessments', { classId, subjectId, title, date, status });
+            if (res.success) {
+                UI.showError(`تم ${label} على التقييم`, 'green');
+                this.renderAssessReviews();
             } else {
                 alert(res.message);
+            }
+        } catch (e) { alert(e.message); }
+        UI.loader(false);
+    },
+
+    async _batchReviewAssessments(status) {
+        const label = status === 'Approved' ? 'الموافقة' : 'الرفض';
+        if (!confirm(`هل أنت متأكد من ${label} على جميع التقييمات المعلقة؟`)) return;
+
+        const cards = document.querySelectorAll('[id^="assessCard_"]');
+        if (!cards.length) return;
+
+        UI.loader(true);
+        // Re-fetch list and approve all
+        try {
+            const myClassIds = this.lookups.classes.map(c => String(c.id));
+            const res = await App.call('getAssessmentsForReview', { classIds: myClassIds });
+            if (res.success) {
+                for (const batch of res.batches) {
+                    await App.call('reviewAssessments', { classId: batch.classId, subjectId: batch.subjectId, title: batch.title, date: batch.date, status });
+                }
+                UI.showError(`تم ${label} على ${res.batches.length} تقييم`, 'green');
+                this.renderAssessReviews();
             }
         } catch (e) { alert(e.message); }
         UI.loader(false);
