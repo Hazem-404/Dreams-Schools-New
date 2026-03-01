@@ -24,6 +24,8 @@ function doPost(e) {
     else if (action === "getClassStudents") result = getClassStudents(payload.classId);
     else if (action === "saveDailyLog") result = saveDailyLog(payload);
     else if (action === "getTeacherLogHistory") result = getTeacherLogHistory(payload.userId);
+    else if (action === "getAllLogsHistory") result = getAllLogsHistory();
+    else if (action === "getLogDetails") result = getLogDetails(payload.logId);
     else if (action === "getStudentRecentActivity") result = getStudentRecentActivity(payload.studentId);
     
     // Admin CRUD
@@ -546,6 +548,105 @@ function getTeacherLogHistory(userId) {
   }
   
   return { success: true, history: history };
+}
+
+// Returns ALL log history across all teachers (for Admin / Supervisor dashboards)
+function getAllLogsHistory() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logsSheet = ss.getSheetByName("Daily_Logs");
+  const data = logsSheet.getDataRange().getValues();
+
+  // Build lookup maps
+  const classMap = {};
+  ss.getSheetByName("Classes").getDataRange().getValues().forEach(r => {
+    classMap[r[0]] = (r[2]) ? `${r[1]} - ${r[2]}` : r[1];
+  });
+  const subMap = {};
+  ss.getSheetByName("Subjects").getDataRange().getValues().forEach(r => subMap[r[0]] = r[1]);
+  const userMap = {};
+  ss.getSheetByName("Users").getDataRange().getValues().forEach(r => userMap[r[0]] = r[1]);
+
+  const history = [];
+
+  // Iterate backwards to show newest first
+  for (let i = data.length - 1; i >= 1; i--) {
+    const row = data[i];
+    // Logs Schema: [0:ID, 1:Date, 2:Class, 3:Subj, 4:Teacher, 5:Term, 6:Content, 7:HW, 8:Notes, 9:Time, 10:Status, 11:SupervisorNote]
+    try {
+      history.push({
+        id: row[0],
+        date: new Date(row[1]).toISOString().split('T')[0],
+        classId: row[2],
+        subjectId: row[3],
+        teacherId: row[4],
+        className: classMap[row[2]] || row[2],
+        subjectName: subMap[row[3]] || row[3],
+        teacherName: userMap[row[4]] || row[4],
+        content: row[6],
+        status: row[10] || "Approved",
+        supervisorNote: row[11] || ""
+      });
+    } catch (e) {
+      // Skip invalid rows
+    }
+  }
+
+  return { success: true, history: history };
+}
+
+// Returns full details of a single log by ID (content, homework, attendance)
+function getLogDetails(logId) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logsSheet = ss.getSheetByName("Daily_Logs");
+  const data = logsSheet.getDataRange().getValues();
+
+  const subMap = {};
+  ss.getSheetByName("Subjects").getDataRange().getValues().forEach(r => subMap[r[0]] = r[1]);
+  const classMap = {};
+  ss.getSheetByName("Classes").getDataRange().getValues().forEach(r => {
+    classMap[r[0]] = (r[2]) ? `${r[1]} - ${r[2]}` : r[1];
+  });
+  const userMap = {};
+  ss.getSheetByName("Users").getDataRange().getValues().forEach(r => userMap[r[0]] = r[1]);
+  const studMap = {};
+  ss.getSheetByName("Students").getDataRange().getValues().forEach(r => studMap[r[0]] = r[1]);
+
+  let logRow = null;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(logId)) { logRow = data[i]; break; }
+  }
+  if (!logRow) return { success: false, message: "السجل غير موجود" };
+
+  // Fetch attendance for this log
+  const attSheet = ss.getSheetByName("Attendance");
+  const attData = attSheet ? attSheet.getDataRange().getValues() : [];
+  const attendance = [];
+  for (let i = 1; i < attData.length; i++) {
+    if (String(attData[i][1]) === String(logId)) {
+      attendance.push({
+        studentName: studMap[attData[i][2]] || attData[i][2],
+        status: attData[i][3] || "Present",
+        note: attData[i][4] || ""
+      });
+    }
+  }
+
+  return {
+    success: true,
+    log: {
+      id: logRow[0],
+      date: new Date(logRow[1]).toISOString().split('T')[0],
+      className: classMap[logRow[2]] || logRow[2],
+      subjectName: subMap[logRow[3]] || logRow[3],
+      teacherName: userMap[logRow[4]] || logRow[4],
+      content: logRow[6] || "",
+      homework: logRow[7] || "",
+      notes: logRow[8] || "",
+      status: logRow[10] || "Approved",
+      supervisorNote: logRow[11] || ""
+    },
+    attendance: attendance
+  };
 }
 
 // ==========================================

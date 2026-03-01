@@ -50,43 +50,74 @@ const Moderator = {
         const content = document.getElementById('dashboardContent');
         const allowed = this.allowedModules || ['module_supervision', 'module_academic', 'module_people'];
 
-        // Build tabs dynamically based on module access
-        // Monitoring & Reviews → module_supervision
-        // Allocations → module_academic
-        // ClassControl → module_supervision
         const tabs = [];
-        if (allowed.includes('module_supervision') || allowed.includes('module_admin')) {
-            tabs.push(`<button onclick="Moderator.switchTab('Monitoring')" class="tab-btn bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold shadow-md transition" data-tab="Monitoring">
-                <i class="fas fa-chart-bar ml-2"></i>المتابعة اليومية
-            </button>`);
-            tabs.push(`<button onclick="Moderator.switchTab('Reviews')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="Reviews">
-                <i class="fas fa-check-double ml-2"></i>مراجعة السجلات
-            </button>`);
-            tabs.push(`<button onclick="Moderator.switchTab('AssessReviews')" class="tab-btn bg-white text-purple-600 hover:bg-purple-50 px-4 py-2 rounded-lg font-bold transition border border-purple-200" data-tab="AssessReviews">
-                <i class="fas fa-star ml-2"></i>مراجعة التقييمات
-            </button>`);
-            tabs.push(`<button onclick="Moderator.switchTab('ClassControl')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="ClassControl">
-                <i class="fas fa-edit ml-2"></i>تسجيل الحصص
-            </button>`);
-            tabs.push(`<button onclick="Moderator.switchTab('Warnings')" class="tab-btn bg-white text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg font-bold transition border border-red-200" data-tab="Warnings">
-                <i class="fas fa-exclamation-triangle ml-2"></i>الإنذارات
-            </button>`);
+        const hasSup = allowed.includes('module_supervision') || allowed.includes('module_admin');
+        const hasAcad = allowed.includes('module_academic') || allowed.includes('module_admin');
+
+        if (hasSup) {
+            // Primary monitoring - highlighted
+            tabs.push(`
+                <button onclick="Moderator.switchTab('Monitoring')" data-tab="Monitoring"
+                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm bg-emerald-600 text-white shadow transition hover:bg-emerald-700">
+                    <i class="fas fa-chart-bar"></i><span>\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0627\u0644\u064a\u0648\u0645\u064a\u0629</span>
+                </button>
+            `);
         }
-        if (allowed.includes('module_academic') || allowed.includes('module_admin')) {
-            tabs.push(`<button onclick="Moderator.switchTab('Allocations')" class="tab-btn bg-white text-gray-600 hover:bg-emerald-50 px-4 py-2 rounded-lg font-bold transition" data-tab="Allocations">
-                <i class="fas fa-chalkboard-teacher ml-2"></i>توزيع المدرسين
-            </button>`);
+        if (hasSup) {
+            tabs.push(`
+                <button onclick="Moderator.switchTab('ClassControl')" data-tab="ClassControl"
+                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 transition">
+                    <i class="fas fa-edit text-teal-500"></i><span>\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062d\u0635\u0635</span>
+                </button>
+            `);
+            tabs.push(`
+                <button onclick="Moderator.switchTab('LogsHistory')" data-tab="LogsHistory"
+                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition">
+                    <i class="fas fa-history text-blue-500"></i><span>\u0633\u062c\u0644 \u0627\u0644\u062d\u0635\u0635</span>
+                </button>
+            `);
+            tabs.push(`
+                <button onclick="Moderator.switchTab('Reviews')" data-tab="Reviews"
+                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300 transition">
+                    <i class="fas fa-check-double text-violet-500"></i><span>\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0633\u062c\u0644\u0627\u062a</span>
+                </button>
+            `);
+            tabs.push(`
+                <button onclick="Moderator.switchTab('AssessReviews')" data-tab="AssessReviews"
+                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition">
+                    <i class="fas fa-star text-amber-500"></i><span>\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u062a\u0642\u064a\u064a\u0645\u0627\u062a</span>
+                </button>
+            `);
+        }
+        if (hasAcad) {
+            tabs.push(`
+                <button onclick="Moderator.switchTab('Allocations')" data-tab="Allocations"
+                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-sky-50 hover:text-sky-700 hover:border-sky-300 transition">
+                    <i class="fas fa-chalkboard-teacher text-sky-500"></i><span>\u062a\u0648\u0632\u064a\u0639 \u0627\u0644\u0645\u062f\u0631\u0633\u064a\u0646</span>
+                </button>
+            `);
+        }
+        if (hasSup) {
+            // Warnings - always last and visually distinct
+            tabs.push(`
+                <button onclick="Moderator.switchTab('Warnings')" data-tab="Warnings"
+                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-red-600 bg-white border border-red-200 hover:bg-red-50 hover:border-red-400 transition mr-auto">
+                    <i class="fas fa-exclamation-triangle text-red-500"></i><span>\u0627\u0644\u0625\u0646\u0630\u0627\u0631\u0627\u062a</span>
+                </button>
+            `);
         }
 
         if (tabs.length === 0) {
-            content.innerHTML = `<div class="p-10 text-center text-gray-400"><i class="fas fa-lock text-4xl mb-4 opacity-30 block"></i><p class="font-bold">ليس لديك صلاحية الوصول لأي قسم حالياً.</p><p class="text-sm mt-1">تواصل مع المدير لتفعيل صلاحياتك.</p></div>`;
+            content.innerHTML = `<div class="p-10 text-center text-gray-400"><i class="fas fa-lock text-4xl mb-4 opacity-30 block"></i><p class="font-bold">\u0644\u064a\u0633 \u0644\u062f\u064a\u0643 \u0635\u0644\u0627\u062d\u064a\u0629 \u0627\u0644\u0648\u0635\u0648\u0644 \u0644\u0623\u064a \u0642\u0633\u0645 \u062d\u0627\u0644\u064a\u0627\u064b.</p><p class="text-sm mt-1">\u062a\u0648\u0627\u0635\u0644 \u0645\u0639 \u0627\u0644\u0645\u062f\u064a\u0631 \u0644\u062a\u0641\u0639\u064a\u0644 \u0635\u0644\u0627\u062d\u064a\u0627\u062a\u0643.</p></div>`;
             return;
         }
 
         const html = `
-            <!-- Tabs -->
-            <div class="flex flex-wrap gap-2 mb-6 border-b pb-2">
-                ${tabs.join('')}
+            <!-- Moderator Tabs - Clean Nav Card -->
+            <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-2 mb-6">
+                <div class="flex flex-wrap gap-1.5 items-center">
+                    ${tabs.join('')}
+                </div>
             </div>
 
             <!-- Content Area -->
@@ -113,6 +144,7 @@ const Moderator = {
 
         if (tab === 'Monitoring') this.renderMonitoring();
         else if (tab === 'Reviews') this.renderReviews();
+        else if (tab === 'LogsHistory') this.renderLogsHistory();
         else if (tab === 'Allocations') this.renderAllocations();
         else if (tab === 'ClassControl') this.renderClassControl();
         else if (tab === 'Warnings') this.renderWarnings();
@@ -1039,6 +1071,241 @@ const Moderator = {
             }
         } catch (e) { alert(e.message); }
         UI.loader(false);
+    },
+
+    // ==========================================
+    // LOGS HISTORY MODULE (Moderator/Supervisor)
+    // ==========================================
+
+    async renderLogsHistory() {
+        const content = document.getElementById('modContent');
+        content.innerHTML = '<div class="spinner mx-auto border-gray-300 border-t-emerald-500 mt-10"></div>';
+        try {
+            const res = await App.call('getAllLogsHistory');
+            if (!res.success) throw new Error(res.message);
+
+            // Filter to only classes/teachers this supervisor is assigned to
+            const myClassNames = this.lookups.classes.map(c => c.displayName);
+            const myTeacherNames = this.lookups.teachers.map(t => t.name);
+            const filtered = res.history.filter(r =>
+                myClassNames.includes(r.className) || myTeacherNames.includes(r.teacherName)
+            );
+
+            this._modLogsData = filtered;
+
+            // Build filter options from the filtered set only
+            const classes = [...new Set(filtered.map(r => r.className).filter(Boolean))].sort();
+            const subjects = [...new Set(filtered.map(r => r.subjectName).filter(Boolean))].sort();
+            const teachers = [...new Set(filtered.map(r => r.teacherName).filter(Boolean))].sort();
+
+            const html = `
+                <div class="space-y-4 animate-fadeIn">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="bg-blue-100 p-2 rounded-xl">
+                            <i class="fas fa-history text-blue-600 text-xl"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-gray-800 text-lg">سجل الحصص</h2>
+                            <p class="text-xs text-gray-500">حصص فصولك ومعلميك المخصصين</p>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                        <div class="flex flex-wrap gap-3 items-center">
+                            <div class="relative flex-grow min-w-[160px]">
+                                <i class="fas fa-search absolute right-3 top-3 text-gray-400 text-sm"></i>
+                                <input type="text" id="mlh_search" oninput="Moderator._applyModLogsFilters()"
+                                    placeholder="بحث في المحتوى أو الفصل أو المادة..."
+                                    class="w-full pr-9 pl-3 py-2 border rounded-lg text-sm outline-none focus:border-blue-400 bg-gray-50">
+                            </div>
+                            <select id="mlh_class" onchange="Moderator._applyModLogsFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-blue-400">
+                                <option value="">كل الفصول</option>
+                                ${classes.map(c => `<option value="${c}">${c}</option>`).join('')}
+                            </select>
+                            <select id="mlh_subject" onchange="Moderator._applyModLogsFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-blue-400">
+                                <option value="">كل المواد</option>
+                                ${subjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+                            </select>
+                            <select id="mlh_teacher" onchange="Moderator._applyModLogsFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-blue-400">
+                                <option value="">كل المعلمين</option>
+                                ${teachers.map(t => `<option value="${t}">${t}</option>`).join('')}
+                            </select>
+                            <select id="mlh_status" onchange="Moderator._applyModLogsFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-blue-400">
+                                <option value="">كل الحالات</option>
+                                <option value="Pending">قيد المراجعة</option>
+                                <option value="Approved">مقبول</option>
+                                <option value="Rejected">مرفوض</option>
+                            </select>
+                            <span id="mlh_count" class="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">${filtered.length} سجل</span>
+                        </div>
+                    </div>
+
+                    <div id="mlh_table"></div>
+                </div>
+            `;
+            content.innerHTML = html;
+            this._renderModLogsTable(filtered);
+        } catch (e) {
+            content.innerHTML = `<div class="text-red-500 text-center p-10">${e.message}</div>`;
+        }
+    },
+
+    _applyModLogsFilters() {
+        if (!this._modLogsData) return;
+        const q = (document.getElementById('mlh_search')?.value || '').toLowerCase();
+        const cls = document.getElementById('mlh_class')?.value || '';
+        const subject = document.getElementById('mlh_subject')?.value || '';
+        const teacher = document.getElementById('mlh_teacher')?.value || '';
+        const status = document.getElementById('mlh_status')?.value || '';
+
+        let data = this._modLogsData;
+        if (cls) data = data.filter(r => r.className === cls);
+        if (subject) data = data.filter(r => r.subjectName === subject);
+        if (teacher) data = data.filter(r => r.teacherName === teacher);
+        if (status) data = data.filter(r => r.status === status);
+        if (q) data = data.filter(r =>
+            (r.className || '').toLowerCase().includes(q) ||
+            (r.subjectName || '').toLowerCase().includes(q) ||
+            (r.teacherName || '').toLowerCase().includes(q) ||
+            (r.content || '').toLowerCase().includes(q)
+        );
+
+        const countEl = document.getElementById('mlh_count');
+        if (countEl) countEl.textContent = `${data.length} سجل`;
+        this._renderModLogsTable(data);
+    },
+
+    _renderModLogsTable(records) {
+        const container = document.getElementById('mlh_table');
+        if (!container) return;
+        if (!records.length) {
+            container.innerHTML = '<div class="text-center p-8 text-gray-400">لا توجد نتائج</div>';
+            return;
+        }
+        const html = `
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-right min-w-[760px]">
+                    <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-bold">
+                        <tr>
+                            <th class="p-4">التاريخ</th>
+                            <th class="p-4">الفصل / المادة</th>
+                            <th class="p-4">المعلم</th>
+                            <th class="p-4">المحتوى</th>
+                            <th class="p-4">الحالة</th>
+                            <th class="p-4 w-12"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        ${records.map(row => {
+            let sc = 'bg-gray-100 text-gray-600', st = row.status;
+            if (row.status === 'Approved') { sc = 'bg-emerald-100 text-emerald-700'; st = 'مقبول'; }
+            else if (row.status === 'Pending') { sc = 'bg-yellow-100 text-yellow-700'; st = 'قيد المراجعة'; }
+            else if (row.status === 'Rejected') { sc = 'bg-red-100 text-red-700'; st = 'مرفوض'; }
+            return `
+                            <tr class="hover:bg-gray-50 transition">
+                                <td class="p-4 font-bold text-gray-700 whitespace-nowrap">${row.date}</td>
+                                <td class="p-4">
+                                    <div class="font-bold text-gray-800">${row.className}</div>
+                                    <div class="text-xs text-gray-500">${row.subjectName}</div>
+                                </td>
+                                <td class="p-4">
+                                    <div class="flex items-center gap-2">
+                                        <div class="bg-blue-100 text-blue-700 rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold">${(row.teacherName || '?')[0]}</div>
+                                        <span class="text-sm font-bold text-gray-700">${row.teacherName || '-'}</span>
+                                    </div>
+                                </td>
+                                <td class="p-4 text-sm text-gray-600 max-w-xs truncate" title="${row.content || ''}">${row.content || '-'}</td>
+                                <td class="p-4">
+                                    <span class="${sc} px-3 py-1 rounded-full text-xs font-bold w-fit block">${st}</span>
+                                    ${row.supervisorNote ? `<span class="text-purple-600 text-xs font-bold bg-purple-50 px-2 py-1 rounded mt-1 block">🔔 ${row.supervisorNote}</span>` : ''}
+                                </td>
+                                <td class="p-4">
+                                    <button onclick="Moderator._showLogDetail('${row.id}')"
+                                        title="عرض تفاصيل الحصة"
+                                        class="w-9 h-9 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-full flex items-center justify-center transition border border-blue-200">
+                                        <i class="fas fa-info-circle"></i>
+                                    </button>
+                                </td>
+                            </tr>`;
+        }).join('')}
+                    </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        container.innerHTML = html;
+    },
+
+    async _showLogDetail(logId) {
+        document.getElementById('modal-log-detail')?.remove();
+        const overlay = document.createElement('div');
+        overlay.id = 'modal-log-detail';
+        overlay.className = 'fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm';
+        overlay.innerHTML = '<div class="spinner mx-auto border-white border-t-blue-400 mt-20"></div>';
+        document.body.appendChild(overlay);
+
+        try {
+            const res = await App.call('getLogDetails', { logId });
+            if (!res.success) throw new Error(res.message);
+            const { log, attendance } = res;
+
+            const statusMap = { 'Present': 'حاضر', 'Absent': 'غائب', 'Late': 'متأخر', 'Excused': 'بعذر' };
+            const statusColor = { 'Present': 'bg-emerald-100 text-emerald-700', 'Absent': 'bg-red-100 text-red-700', 'Late': 'bg-yellow-100 text-yellow-800', 'Excused': 'bg-blue-100 text-blue-700' };
+
+            const attRows = attendance.length ? attendance.map(a => `
+                <div class="flex items-start justify-between py-2.5 border-b border-gray-100 last:border-0">
+                    <span class="font-bold text-gray-800 text-sm">${UI.formatName(a.studentName)}</span>
+                    <div class="flex flex-col items-end gap-1">
+                        <span class="${statusColor[a.status] || 'bg-gray-100 text-gray-600'} px-2 py-0.5 rounded-full text-xs font-bold">${statusMap[a.status] || a.status}</span>
+                        ${a.note ? `<span class="text-yellow-700 bg-yellow-50 text-xs px-2 py-0.5 rounded border border-yellow-100">• ${a.note}</span>` : ''}
+                    </div>
+                </div>`).join('') : '<p class="text-gray-400 text-sm text-center py-4">لا توجد بيانات حضور</p>';
+
+            const absCount = attendance.filter(a => a.status === 'Absent').length;
+            const noteCount = attendance.filter(a => a.note).length;
+
+            overlay.innerHTML = `
+                <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div class="bg-gradient-to-l from-blue-600 to-indigo-600 p-5 text-white flex justify-between items-start">
+                        <div>
+                            <h3 class="font-bold text-xl">${log.className}</h3>
+                            <p class="text-blue-100 text-sm">${log.subjectName} &bull; ${UI.formatName(log.teacherName)} &bull; ${log.date}</p>
+                            <div class="flex gap-3 mt-2">
+                                ${absCount > 0 ? `<span class="bg-red-500/30 text-white text-xs font-bold px-2 py-0.5 rounded-full"><i class="fas fa-user-times ml-1"></i>${absCount} غائب</span>` : ''}
+                                ${noteCount > 0 ? `<span class="bg-yellow-400/30 text-white text-xs font-bold px-2 py-0.5 rounded-full"><i class="fas fa-comment-alt ml-1"></i>${noteCount} ملاحظة</span>` : ''}
+                            </div>
+                        </div>
+                        <button onclick="document.getElementById('modal-log-detail').remove()" class="text-white/70 hover:text-white transition text-xl p-1 mt-1"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="overflow-y-auto custom-scrollbar flex-grow p-5 space-y-4">
+                        ${log.content ? `<div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                            <p class="text-gray-400 text-xs font-bold mb-2"><i class="fas fa-book-open ml-1 text-blue-500"></i>المحتوى</p>
+                            <p class="text-gray-800 text-sm leading-relaxed">${log.content}</p>
+                        </div>` : ''}
+                        ${log.homework ? `<div class="bg-orange-50 p-4 rounded-xl border border-orange-200">
+                            <p class="text-orange-500 text-xs font-bold mb-2"><i class="fas fa-pencil-alt ml-1"></i>الواجب</p>
+                            <p class="text-gray-800 text-sm leading-relaxed">${log.homework}</p>
+                        </div>` : ''}
+                        ${log.supervisorNote ? `<div class="bg-purple-50 p-4 rounded-xl border border-purple-200">
+                            <p class="text-purple-600 text-xs font-bold mb-2"><i class="fas fa-comment-dots ml-1"></i>ملاحظة المشرف</p>
+                            <p class="text-gray-800 text-sm">${log.supervisorNote}</p>
+                        </div>` : ''}
+                        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                            <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                                <h4 class="font-bold text-gray-700"><i class="fas fa-users ml-2 text-blue-500"></i>سجل الحضور</h4>
+                                <span class="text-xs font-bold bg-blue-100 text-blue-700 px-3 py-1 rounded-full">${attendance.length} طالب</span>
+                            </div>
+                            <div class="p-4 max-h-64 overflow-y-auto custom-scrollbar">${attRows}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } catch (e) {
+            overlay.innerHTML = `<div class="bg-white rounded-2xl p-8 text-red-500 font-bold text-center">${e.message}<br><button onclick="document.getElementById('modal-log-detail').remove()" class="mt-4 bg-gray-100 px-4 py-2 rounded-lg text-gray-700 text-sm font-bold">إغلاق</button></div>`;
+        }
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
     },
 
 };
