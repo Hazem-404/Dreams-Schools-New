@@ -70,6 +70,7 @@ const Admin = {
         if (tab === 'StudentsManagement') return this.renderStudentsManagement();
         if (tab === 'ParentsManagement') return this.renderParentsManagement();
         if (tab === 'AssessReviews') return this.renderAssessReviews();
+        if (tab === 'AssessEntry') return this.renderAssessEntry();
 
         // Load Data Table with client-side cache
         try {
@@ -2272,6 +2273,249 @@ const Admin = {
         }
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
     },
+
+    // ============================================
+    // ASSESSMENTS ENTRY
+    // ============================================
+
+    renderAssessEntry() {
+        const today = new Date().toISOString().split('T')[0];
+        const html = `
+            <div class="space-y-6 animate-fadeIn max-w-4xl mx-auto">
+                <!-- Header -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
+                    <div class="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-purple-600">
+                        <i class="fas fa-pen text-3xl"></i>
+                    </div>
+                    <h3 class="font-bold text-xl text-gray-800">إدارة التقييمات</h3>
+                    <p class="text-gray-500 text-sm">أدخل تقييمات الطلاب أو استعرض السجل</p>
+                </div>
+
+                <!-- Sub-tabs -->
+                <div class="flex gap-2 bg-white p-2 rounded-xl shadow-sm border border-gray-100 w-fit mx-auto overflow-x-auto max-w-full custom-scrollbar">
+                    <button onclick="Admin._showAssessSubTab('enter')" id="admin_asub_enter" class="whitespace-nowrap flex-shrink-0 px-5 py-2 rounded-lg font-bold text-sm bg-purple-100 text-purple-700 transition">
+                        <i class="fas fa-pen ml-1"></i>تسجيل تقييم
+                    </button>
+                    <button onclick="Admin._showAssessSubTab('history')" id="admin_asub_history" class="whitespace-nowrap flex-shrink-0 px-5 py-2 rounded-lg font-bold text-sm text-gray-500 hover:bg-gray-50 transition">
+                        <i class="fas fa-list ml-1"></i>سجل التقييمات الشامل
+                    </button>
+                </div>
+
+                <!-- Entry Form -->
+                <div id="adminAssessEntryForm">
+                    <!-- Class/Subject Selector -->
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-500 text-sm font-bold mb-2">الفصل <span class="text-red-400">*</span></label>
+                            <div class="relative">
+                                <select id="adminAssessClassSelect" onchange="Admin._loadAssessStudents(this.value)" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none outline-none focus:ring-2 focus:ring-purple-500 text-sm font-bold text-gray-700">
+                                    <option value="">-- اختر الفصل --</option>
+                                    ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
+                                </select>
+                                <div class="absolute left-4 top-4 text-purple-600 pointer-events-none"><i class="fas fa-chevron-down"></i></div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-gray-500 text-sm font-bold mb-2">المادة <span class="text-red-400">*</span></label>
+                            <div class="relative">
+                                <select id="adminAssessSubjectSelect" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none outline-none focus:ring-2 focus:ring-purple-500 text-sm font-bold text-gray-700">
+                                    <option value="">-- اختر المادة --</option>
+                                    ${this.lookups.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                                </select>
+                                <div class="absolute left-4 top-4 text-purple-600 pointer-events-none"><i class="fas fa-chevron-down"></i></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Assessment Details -->
+                    <div id="assessDetails" class="hidden">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-gray-500 text-xs font-bold mb-1">عنوان التقييم <span class="text-red-400">*</span></label>
+                                    <input type="text" id="assessTitle" placeholder="مثال: الأسبوع الأول" class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 font-bold text-gray-700">
+                                </div>
+                                <div>
+                                    <label class="block text-gray-500 text-xs font-bold mb-1">التاريخ <span class="text-red-400">*</span></label>
+                                    <input type="date" id="assessDate" value="${today}" class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 font-bold text-gray-700">
+                                </div>
+                                <div>
+                                    <label class="block text-gray-500 text-xs font-bold mb-1">الدرجة الكاملة <span class="text-red-400">*</span></label>
+                                    <input type="number" id="assessMaxScore" min="1" max="100" value="10" class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 font-bold text-gray-700">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Student Grades -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                            <div class="p-4 bg-purple-50 border-b border-purple-100 flex justify-between items-center">
+                                <div class="font-bold text-purple-800"><i class="fas fa-users ml-2"></i>درجات الطلاب</div>
+                                <button onclick="Admin._fillAllScores()" class="text-xs font-bold bg-purple-100 text-purple-700 px-3 py-1 rounded-lg hover:bg-purple-200 transition">تعبئة الكل بالدرجة الكاملة</button>
+                            </div>
+                            <div id="assessStudentList" class="divide-y divide-gray-100 max-h-[420px] overflow-y-auto custom-scrollbar"></div>
+                            <div class="p-4 border-t bg-gray-50">
+                                <button onclick="Admin.submitAssessments()" class="w-full bg-purple-600 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-purple-700 transition transform active:scale-95">
+                                    <i class="fas fa-save ml-2"></i> حفظ التقييمات كمسؤول
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History -->
+                <div id="adminAssessHistory" class="hidden">
+                    <div class="text-center py-10"><div class="spinner mx-auto border-gray-300 border-t-purple-600"></div></div>
+                </div>
+            </div>
+        `;
+        document.getElementById('dashboardContent').innerHTML = html;
+    },
+
+    _showAssessSubTab(tab) {
+        document.getElementById('admin_asub_enter').className = `px-5 py-2 rounded-lg font-bold text-sm transition ${tab === 'enter' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:bg-gray-50'}`;
+        document.getElementById('admin_asub_history').className = `px-5 py-2 rounded-lg font-bold text-sm transition ${tab === 'history' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:bg-gray-50'}`;
+        document.getElementById('adminAssessEntryForm').classList.toggle('hidden', tab !== 'enter');
+        document.getElementById('adminAssessHistory').classList.toggle('hidden', tab !== 'history');
+        if (tab === 'history') this._loadAssessHistory();
+    },
+
+    async _loadAssessHistory() {
+        const container = document.getElementById('adminAssessHistory');
+        container.innerHTML = '<div class="text-center py-10"><div class="spinner mx-auto border-gray-300 border-t-purple-600"></div></div>';
+        try {
+            const res = await App.call('getAllAssessmentsHistory', {});
+            if (!res.success) throw new Error(res.message);
+
+            if (!res.history || res.history.length === 0) {
+                container.innerHTML = '<div class="p-10 text-center text-gray-400 bg-white rounded-xl shadow-sm font-bold">لا توجد تقييمات مسجلة في النظام بعد</div>';
+                return;
+            }
+
+            container.innerHTML = '<div class="grid gap-4 md:grid-cols-2">' + res.history.map(b => {
+                const cname = this.lookups.classes.find(c => c.id == b.classId)?.displayName || b.classId;
+                const sname = this.lookups.subjects.find(s => s.id == b.subjectId)?.name || b.subjectId;
+                const statusBadge = b.status === 'Approved' ? '<span class="px-2 py-1 text-xs font-bold bg-green-100 text-green-700 rounded-lg">معتمد</span>' :
+                    b.status === 'Rejected' ? '<span class="px-2 py-1 text-xs font-bold bg-red-100 text-red-700 rounded-lg">مرفوض</span>' :
+                        '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-700 rounded-lg">قيد المراجعة</span>';
+                return `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:border-purple-300 transition">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-lg">${b.title}</h4>
+                                <div class="text-xs text-gray-500 mt-1"><i class="fas fa-calendar-alt ml-1"></i>${new Date(b.date).toLocaleDateString('ar-EG')} &bull; معلم: ${UI.formatName(b.teacherId)}</div>
+                            </div>
+                            ${statusBadge}
+                        </div>
+                        <div class="bg-gray-50 p-2 rounded-lg text-sm mb-3">
+                            <div class="flex justify-between mb-1"><span class="text-gray-500">الفصل:</span> <span class="font-bold text-gray-700">${cname}</span></div>
+                            <div class="flex justify-between mb-1"><span class="text-gray-500">المادة:</span> <span class="font-bold text-gray-700">${sname}</span></div>
+                            <div class="flex justify-between mb-1"><span class="text-gray-500">الطلاب المقيمين:</span> <span class="font-bold text-gray-700">${b.studentCount}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">الدرجة الكاملة:</span> <span class="font-bold text-gray-700">${b.maxScore}</span></div>
+                        </div>
+                        <button class="w-full py-2 text-sm font-bold bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition opacity-50 cursor-not-allowed">
+                            تفاصيل التقييم (قريباً)
+                        </button>
+                    </div>
+                `;
+            }).join('') + '</div>';
+        } catch (e) {
+            container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-xl">${e.message}</div>`;
+        }
+    },
+
+    async _loadAssessStudents(classId) {
+        const detailsArea = document.getElementById('assessDetails');
+        const listArea = document.getElementById('assessStudentList');
+
+        if (!classId) {
+            detailsArea.classList.add('hidden');
+            this._assessStudents = null;
+            return;
+        }
+
+        detailsArea.classList.remove('hidden');
+        listArea.innerHTML = '<div class="p-8 text-center"><div class="spinner mx-auto border-gray-300 border-t-purple-600"></div></div>';
+
+        try {
+            const res = await App.call('getClassStudents', { classId: classId });
+            if (!res.success) throw new Error(res.message);
+            this._assessStudents = res.students;
+
+            const maxScore = parseFloat(document.getElementById('assessMaxScore').value) || 10;
+
+            listArea.innerHTML = res.students.length ? res.students.map(s => `
+                <div class="flex items-center gap-3 p-3 hover:bg-gray-50 transition">
+                    <div class="flex-1 font-bold text-gray-800 text-sm">${UI.formatName(s.name)}</div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="ascore_${s.id}" min="0" max="${maxScore}" placeholder="-"
+                            class="w-20 p-2 border border-gray-200 rounded-lg text-center font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 text-sm">
+                        <span class="text-gray-400 text-xs font-bold">/ ${maxScore}</span>
+                    </div>
+                    <input type="text" id="acomment_${s.id}" placeholder="تعليق..." class="w-32 p-2 border border-gray-200 rounded-lg text-xs bg-gray-50 outline-none focus:ring-2 focus:ring-purple-400">
+                </div>
+            `).join('') : '<div class="p-10 text-center text-gray-400">لا يوجد طلاب</div>';
+        } catch (e) {
+            listArea.innerHTML = `<div class="p-8 text-center text-red-500">${e.message}</div>`;
+        }
+    },
+
+    _fillAllScores() {
+        const max = document.getElementById('assessMaxScore').value;
+        document.querySelectorAll('[id^="ascore_"]').forEach(inp => inp.value = max);
+    },
+
+    async submitAssessments() {
+        const title = document.getElementById('assessTitle').value.trim();
+        const date = document.getElementById('assessDate').value;
+        const maxScore = parseFloat(document.getElementById('assessMaxScore').value);
+        const classId = document.getElementById('adminAssessClassSelect').value;
+        const subjectId = document.getElementById('adminAssessSubjectSelect').value;
+
+        if (!title) return alert("الرجاء كتابة عنوان التقييم");
+        if (!date) return alert("الرجاء تحديد التاريخ");
+        if (!maxScore || maxScore <= 0) return alert("الرجاء تحديد الدرجة الكاملة");
+        if (!classId) return alert("الرجاء اختيار الفصل");
+        if (!subjectId) return alert("الرجاء اختيار المادة");
+        if (!this._assessStudents || !this._assessStudents.length) return alert("لا يوجد طلاب في هذا الفصل");
+
+        const students = this._assessStudents.map(s => {
+            const scoreEl = document.getElementById(`ascore_${s.id}`);
+            const commentEl = document.getElementById(`acomment_${s.id}`);
+            return {
+                id: s.id,
+                score: scoreEl ? scoreEl.value : "",
+                comment: commentEl ? commentEl.value.trim() : ""
+            };
+        });
+
+        UI.showError("جاري الحفظ...", "blue");
+
+        try {
+            const res = await App.call('saveAssessments', {
+                teacherId: 'Admin', // Admin acts as teacher for save
+                classId: classId,
+                subjectId: subjectId,
+                title,
+                date,
+                maxScore,
+                students
+            });
+
+            if (res.success) {
+                UI.showError("تم حفظ التقييمات بنجاح ✓", "green");
+                // Reset form
+                document.getElementById('assessTitle').value = '';
+                document.getElementById('adminAssessClassSelect').value = '';
+                document.getElementById('adminAssessSubjectSelect').value = '';
+                document.getElementById('assessDetails').classList.add('hidden');
+                this._assessStudents = null;
+            } else {
+                alert("فشل الحفظ: " + res.message);
+            }
+        } catch (e) {
+            alert("خطأ: " + e.message);
+        }
+    }
 
 };
 
