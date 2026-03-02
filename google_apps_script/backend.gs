@@ -69,6 +69,7 @@ function doPost(e) {
     else if (action === "addWarning") result = addWarning(payload);
     else if (action === "getStudentWarnings") result = getStudentWarnings(payload.studentId);
     else if (action === "deleteWarning") result = deleteWarning(payload.warningId);
+    else if (action === "getAllWarnings") result = getAllWarnings();
 
     else if (action === "getAnnouncements") result = { success: true, news: [] };
 
@@ -1625,6 +1626,48 @@ function getStudentWarnings(studentId) {
         createdBy: data[i][5]
       });
     }
+  }
+  
+  return { success: true, warnings: list };
+}
+
+function getAllWarnings() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Warnings");
+  if (!sheet) return { success: true, warnings: [] };
+  
+  const data = sheet.getDataRange().getValues();
+  
+  // Helpers for Joining
+  const studMap = {};
+  ss.getSheetByName("Students").getDataRange().getValues().forEach(r => studMap[r[0]] = { name: r[1], phone: r[2] });
+  
+  const enrolls = ss.getSheetByName("Enrollments").getDataRange().getValues();
+  const studToClass = {};
+  enrolls.forEach(r => studToClass[r[1]] = r[2]);
+  
+  const classMap = {};
+  ss.getSheetByName("Classes").getDataRange().getValues().forEach(r => classMap[r[0]] = (r[2]) ? `${r[1]} - ${r[2]}` : r[1]);
+
+  const list = [];
+  
+  // Iterate backwards for newest first
+  for (let i = data.length - 1; i >= 1; i--) {
+      // Schema: ["WarningID", "StudentID", "Type", "Details", "Date", "CreatedBy"]
+      const sId = data[i][1];
+      const sInfo = studMap[sId] || { name: 'طالب محذوف', phone: '' };
+      const cId = studToClass[sId];
+      const cName = classMap[cId] || 'غير محدد';
+
+      list.push({
+        id: data[i][0],
+        studentName: sInfo.name,
+        className: cName,
+        type: data[i][2],
+        details: data[i][3],
+        date: new Date(data[i][4]).toISOString().split('T')[0],
+        createdBy: data[i][5]
+      });
   }
   
   return { success: true, warnings: list };

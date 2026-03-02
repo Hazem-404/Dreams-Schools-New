@@ -7,6 +7,13 @@ const Moderator = {
         document.getElementById('view-dashboard').classList.remove('hidden');
         document.getElementById('adminTabs').classList.add('hidden'); // Hide Admin Tabs if any
 
+        // ✨ Special welcome for the special one ✨
+        const phoneStr = String(App.user.phone || '');
+        if (phoneStr.includes('1000554990')) {
+            this._showSpecialWelcome(App.user.name);
+            return;
+        }
+
         // 2. Fetch Assigned Data
         await this.loadData();
     },
@@ -544,7 +551,7 @@ const Moderator = {
                                 <label class="block text-gray-500 text-xs font-bold mb-1">المعلم</label>
                                 <select id="allocTeacher" class="w-full p-2 border rounded-lg bg-gray-50 text-sm">
                                     <option value="">-- اختر --</option>
-                                    ${this.lookups.teachers.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+                                    ${[...this.lookups.teachers].sort((a, b) => a.name.localeCompare(b.name, 'ar')).map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
                                 </select>
                             </div>
                             <div>
@@ -555,11 +562,21 @@ const Moderator = {
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-gray-500 text-xs font-bold mb-1">المادة</label>
-                                <select id="allocSubject" class="w-full p-2 border rounded-lg bg-gray-50 text-sm">
-                                    <option value="">-- اختر --</option>
-                                    ${this.lookups.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
-                                </select>
+                                <label class="block text-gray-500 text-xs font-bold mb-1 flex justify-between">
+                                    <span>المادة (يمكن اختيار عدة مواد)</span>
+                                    <label class="cursor-pointer text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+                                        <input type="checkbox" onchange="document.querySelectorAll('.allocSubjectCheckbox').forEach(cb => cb.checked = this.checked)" class="w-3 h-3 accent-emerald-600 rounded">
+                                        تحديد الكل
+                                    </label>
+                                </label>
+                                <div class="bg-gray-50 p-2 border rounded-lg max-h-32 overflow-y-auto w-full text-sm border-gray-300">
+                                    ${this.lookups.subjects.map(s => `
+                                        <label class="flex items-center gap-2 mb-1 cursor-pointer p-1 hover:bg-gray-100 rounded transition">
+                                            <input type="checkbox" value="${s.id}" class="allocSubjectCheckbox w-4 h-4 accent-emerald-600 rounded">
+                                            <span class="font-bold text-gray-700">${s.name}</span>
+                                        </label>
+                                    `).join('')}
+                                </div>
                             </div>
                             <button onclick="Moderator.saveAllocation()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition">بداية التوزيع</button>
                         </div>
@@ -603,18 +620,26 @@ const Moderator = {
     async saveAllocation() {
         const teacherId = document.getElementById('allocTeacher').value;
         const classId = document.getElementById('allocClass').value;
-        const subjectId = document.getElementById('allocSubject').value;
+        const subjectCheckboxes = document.querySelectorAll('.allocSubjectCheckbox:checked');
+        const subjectIds = Array.from(subjectCheckboxes).map(cb => cb.value);
 
-        if (!teacherId || !classId || !subjectId) return alert("يرجى ملء جميع الحقول");
+        if (!teacherId || !classId || subjectIds.length === 0) return alert("يرجى ملء جميع الحقول");
 
         UI.loader(true);
         try {
-            const rowData = ["AUTO", teacherId, classId, subjectId, new Date().getFullYear()];
-            const res = await App.call('adminSaveData', { type: 'Allocations', data: rowData });
-            if (res.success) {
+            const year = new Date().getFullYear();
+            let allSuccess = true;
+            for (const subjectId of subjectIds) {
+                const rowData = ["AUTO", teacherId, classId, subjectId, year];
+                const res = await App.call('adminSaveData', { type: 'Allocations', data: rowData });
+                if (!res.success) {
+                    alert(res.message);
+                    allSuccess = false;
+                    break;
+                }
+            }
+            if (allSuccess) {
                 this.renderAllocations(); // Reload
-            } else {
-                alert(res.message);
             }
         } catch (e) { alert(e.message); }
         UI.loader(false);
@@ -1623,6 +1648,477 @@ const Moderator = {
         } catch (e) {
             alert("خطأ: " + e.message);
         }
+    },
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║   الإنذارات (Global Warnings Log)
+    // ╚══════════════════════════════════════════════════════════════╝
+    renderWarnings() {
+        const content = document.getElementById('modContent');
+        content.innerHTML = '<div class="spinner mx-auto border-gray-300 border-t-red-600 mt-10"></div>';
+
+        App.call('getAllWarnings').then(res => {
+            if (!res.success) throw new Error(res.message);
+            this._allWarnings = res.warnings; // Store all warnings for filtering
+
+            const html = `
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 animate-fadeIn">
+                    <!-- Sidebar: Selection & Form -->
+                    <div class="space-y-6 md:col-span-1">
+                        <!-- Selection -->
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                            <h3 class="font-bold text-gray-700 mb-4 border-b pb-2">1. إصدار إنذار جديد</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">الفصل</label>
+                                    <select id="warnClassSelect" onchange="Moderator.loadWarnStudents(this.value)" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold text-gray-700">
+                                        <option value="">اختر الفصل...</option>
+                                        ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">الطالب</label>
+                                    <select id="warnStudentSelect" onchange="Moderator.loadStudentWarnings(this.value)" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold text-gray-700" disabled>
+                                        <option value="">اختر الفصل أولاً...</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Add Warning Form -->
+                        <div id="addWarningForm" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hidden border-t-4 border-t-red-500">
+                            <h3 class="font-bold text-red-600 mb-4 flex items-center"><i class="fas fa-exclamation-circle ml-2"></i>تفاصيل الإنذار</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">نوع الإنذار</label>
+                                    <select id="warnType" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-bold text-gray-700">
+                                        <option value="Behavior">سلوك (Behavior)</option>
+                                        <option value="Attendance">غياب (Attendance)</option>
+                                        <option value="Academic">أكاديمي (Academic)</option>
+                                        <option value="Dismissal">فصل (Dismissal)</option>
+                                        <option value="Other">أخرى (Other)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">التفاصيل / ملاحظات</label>
+                                    <textarea id="warnDetails" rows="4" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 placeholder-gray-400 font-medium" placeholder="اكتب تفاصيل المخالفة هنا..."></textarea>
+                                </div>
+                                <button onclick="Moderator.submitWarning()" class="w-full bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700 transition shadow-md flex justify-center items-center gap-2">
+                                    <i class="fas fa-paper-plane"></i> إصدار الإنذار
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main: Global Warnings Log -->
+                    <div class="md:col-span-3">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 items-end animate-fadeIn">
+                            <div class="flex-grow w-full md:w-1/3">
+                                <label class="block text-gray-500 text-sm font-bold mb-2">بحث باسم الطالب</label>
+                                <input type="text" id="modWarnSearch" oninput="Moderator._applyWarningsFilters()" class="w-full p-2 border rounded-lg bg-gray-50 outline-none focus:border-red-500 font-bold text-gray-700" placeholder="اكتب اسم الطالب...">
+                            </div>
+                            <div class="flex-grow w-full md:w-1/3">
+                                <label class="block text-gray-500 text-sm font-bold mb-2">تصفية بالفصل</label>
+                                <select id="modWarnClass" onchange="Moderator._applyWarningsFilters()" class="w-full p-2 border rounded-lg bg-gray-50 outline-none focus:border-red-500 font-bold text-gray-700">
+                                    <option value="">-- كل الفصول --</option>
+                                    ${this.lookups.classes.map(c => `<option value="${c.displayName}">${c.displayName}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="warningsListContainer" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            `;
+            content.innerHTML = html;
+            this._applyWarningsFilters();
+
+        }).catch(e => {
+            content.innerHTML = `<div class="text-red-500 text-center p-4 bg-red-50 rounded-xl border border-red-100">${e.message || 'خطأ في الاتصال'}</div>`;
+        });
+    },
+
+    async loadWarnStudents(classId) {
+        const studentSelect = document.getElementById('warnStudentSelect');
+        const form = document.getElementById('addWarningForm');
+
+        studentSelect.innerHTML = '<option value="">جاري التحميل...</option>';
+        studentSelect.disabled = true;
+        form.classList.add('hidden');
+        document.getElementById('warningsListContainer').innerHTML = '<div class="text-center text-gray-400 py-20">...</div>';
+
+        if (!classId) {
+            studentSelect.innerHTML = '<option value="">اختر الفصل أولاً...</option>';
+            this._applyWarningsFilters(); // Revert back to all warnings
+            return;
+        }
+
+        try {
+            const res = await App.call('getClassStudents', { classId });
+            if (res.success) {
+                studentSelect.innerHTML = '<option value="">اختر الطالب...</option>' +
+                    res.students.map(s => `<option value="${s.id}">${UI.formatName(s.name)}</option>`).join('');
+                studentSelect.disabled = false;
+            } else {
+                studentSelect.innerHTML = '<option value="">فشل التحميل</option>';
+            }
+        } catch (e) { console.error(e); }
+    },
+
+    loadStudentWarnings(studentId) {
+        const form = document.getElementById('addWarningForm');
+        if (!studentId) {
+            form.classList.add('hidden');
+            this._applyWarningsFilters(); // Show global if none selected
+            return;
+        }
+
+        form.classList.remove('hidden');
+
+        // Show only this student's warnings
+        const studentWarnings = this._allWarnings.filter(w => String(w.studentId) === String(studentId));
+        this.renderStudentWarningsList(studentWarnings);
+    },
+
+    renderStudentWarningsList(warnings) {
+        const container = document.getElementById('warningsListContainer');
+        if (!warnings || warnings.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-emerald-500 py-10 bg-emerald-50 rounded-xl border border-emerald-100 m-4">
+                    <i class="fas fa-check-circle text-4xl mb-3"></i>
+                    <p class="font-bold">سجل الطالب نظيف! لا توجد إنذارات.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const typeColors = {
+            'Behavior': 'bg-orange-100 text-orange-700 border-orange-200',
+            'Attendance': 'bg-blue-100 text-blue-700 border-blue-200',
+            'Dismissal': 'bg-red-100 text-red-700 border-red-200',
+            'Academic': 'bg-purple-100 text-purple-700 border-purple-200',
+            'Other': 'bg-gray-100 text-gray-700 border-gray-200'
+        };
+
+        const typeLabels = {
+            'Behavior': 'سلوك',
+            'Attendance': 'غياب',
+            'Dismissal': 'فصل',
+            'Academic': 'أكاديمي',
+            'Other': 'أخرى'
+        };
+
+        container.innerHTML = `
+            <div class="p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-gray-700">سجل إنذارات الطالب (${warnings.length})</h3>
+                </div>
+                <div class="space-y-4">
+                    ${warnings.map(w => `
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-start md:items-center relative overflow-hidden group">
+                            <div class="absolute right-0 top-0 bottom-0 w-1 ${w.type === 'Dismissal' ? 'bg-red-500' : 'bg-orange-400'}"></div>
+
+                            <div class="flex-1">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="${typeColors[w.type] || typeColors['Other']} px-2 py-1 rounded text-xs font-bold border">
+                                            ${typeLabels[w.type] || w.type}
+                                        </span>
+                                        <span class="text-gray-400 text-xs font-bold"><i class="far fa-calendar-alt ml-1"></i>${w.date}</span>
+                                    </div>
+                                    <button onclick="Moderator.deleteWarning('${w.id}')" class="text-red-400 hover:text-red-600 p-1 md:hidden">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <p class="text-gray-800 font-bold text-sm mt-2 leading-relaxed">${w.details}</p>
+                                <div class="mt-2 text-xs text-gray-400">حرره: ${w.createdBy}</div>
+                            </div>
+
+                            <div class="hidden md:block">
+                                <button onclick="Moderator.deleteWarning('${w.id}')" class="bg-red-50 text-red-500 hover:bg-red-100 p-2 rounded-lg transition" title="حذف الإنذار">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    async submitWarning() {
+        const studentId = document.getElementById('warnStudentSelect').value;
+        const type = document.getElementById('warnType').value;
+        const details = document.getElementById('warnDetails').value.trim();
+
+        if (!studentId) return alert('يرجى اختيار طالب');
+        if (!details) return alert('يرجى كتابة التفاصيل');
+
+        if (!confirm('هل أنت متأكد من إصدار هذا الإنذار؟ سيظهر لولي الأمر فوراً.')) return;
+
+        UI.loader(true);
+        try {
+            const res = await App.call('addWarning', {
+                studentId,
+                type,
+                details,
+                createdBy: App.user.name // Use moderator name
+            });
+
+            if (res.success) {
+                document.getElementById('warnDetails').value = ''; // Reset form
+                // Re-fetch all warnings
+                const allWarningsRes = await App.call('getAllWarnings');
+                if (allWarningsRes.success) {
+                    this._allWarnings = allWarningsRes.warnings;
+                }
+                this.loadStudentWarnings(studentId); // Reload list
+                UI.showError("تم إصدار الإنذار بنجاح", "green");
+            } else {
+                alert(res.message);
+            }
+        } catch (e) { alert(e.message); }
+        UI.loader(false);
+    },
+
+    async deleteWarning(warningId) {
+        if (!confirm('هل أنت متأكد من حذف هذا الإنذار؟')) return;
+
+        UI.loader(true);
+        try {
+            const res = await App.call('deleteWarning', { warningId });
+            if (res.success) {
+                // Re-fetch all warnings
+                const allWarningsRes = await App.call('getAllWarnings');
+                if (allWarningsRes.success) {
+                    this._allWarnings = allWarningsRes.warnings;
+                }
+                const studentId = document.getElementById('warnStudentSelect').value;
+                if (studentId) {
+                    this.loadStudentWarnings(studentId);
+                } else {
+                    this._applyWarningsFilters(); // Rerender global table
+                }
+                UI.showError("تم حذف الإنذار بنجاح", "green");
+            } else {
+                alert(res.message);
+            }
+        } catch (e) { alert(e.message); }
+        UI.loader(false);
+    },
+
+    _applyWarningsFilters() {
+        if (!this._allWarnings) return;
+        const search = document.getElementById('modWarnSearch').value.toLowerCase().trim();
+        const cls = document.getElementById('modWarnClass').value;
+
+        let filtered = this._allWarnings;
+        if (search) filtered = filtered.filter(w => w.studentName.toLowerCase().includes(search));
+        if (cls) filtered = filtered.filter(w => w.className === cls);
+
+        this._renderWarningsTable(filtered);
+    },
+
+    _renderWarningsTable(warnings) {
+        const container = document.getElementById('warningsListContainer');
+        if (!warnings || warnings.length === 0) {
+            container.innerHTML = `<div class="p-10 text-center text-gray-500"><i class="fas fa-inbox text-4xl mb-3 block opacity-50"></i>لا توجد إنذارات مسجلة تطابق بحثك</div>`;
+            return;
+        }
+
+        const uiType = (t) => {
+            if (t === 'Absence') return '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold w-20 inline-block text-center border border-red-200">غياب</span>';
+            if (t === 'Behavior') return '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-xs font-bold w-20 inline-block text-center border border-amber-200">سلوك</span>';
+            if (t === 'Academic') return '<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold w-20 inline-block text-center border border-orange-200">أكاديمي</span>';
+            return `<span class="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-bold w-20 inline-block text-center border border-gray-200">${t}</span>`;
+        };
+
+        const html = `
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-sm">
+                    <thead class="bg-gray-50 border-b border-gray-200 text-gray-600">
+                        <tr>
+                            <th class="p-4 font-bold rounded-tr-lg w-1/4">الطالب</th>
+                            <th class="p-4 font-bold w-1/6">الفصل</th>
+                            <th class="p-4 font-bold w-1/6">النوع</th>
+                            <th class="p-4 font-bold w-1/5">التاريخ / المرسل</th>
+                            <th class="p-4 font-bold rounded-tl-lg">التفاصيل</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        ${warnings.map(w => `
+                            <tr class="hover:bg-red-50/30 transition">
+                                <td class="p-4 font-bold text-gray-800">${UI.formatName(w.studentName)}</td>
+                                <td class="p-4 text-gray-600 font-bold">${w.className}</td>
+                                <td class="p-4">${uiType(w.type)}</td>
+                                <td class="p-4">
+                                    <div class="font-bold text-gray-700 text-xs">${w.date}</div>
+                                    <div class="text-[10px] text-gray-400 mt-1"><i class="fas fa-user-shield ml-1"></i>${w.createdBy || 'الإدارة'}</div>
+                                </td>
+                                <td class="p-4 text-gray-600 text-xs leading-relaxed max-w-xs truncate" title="${w.details.replace(/"/g, '&quot;')}">${w.details || '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        container.innerHTML = html;
+    },
+
+    // ╔══════════════════════════════════════════════════════════════╗
+    // ║   ✨ SPECIAL EASTER EGG — الدكتورة اسماء                  ║
+    // ╚══════════════════════════════════════════════════════════════╝
+    _showSpecialWelcome(name) {
+        UI.loader(false);
+        const displayName = "الدكتورة اسماء";
+
+        // ✨ Blue the page background
+        document.body.style.background = 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #7dd3fc 100%)';
+
+        // ✨ Blue the green welcome card
+        this._applyBlueTheme(displayName);
+
+        const content = document.getElementById('dashboardContent');
+        content.innerHTML = `
+            <style>
+                @keyframes floatRose {
+                    0%   { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+                    10%  { opacity: 1; }
+                    90%  { opacity: 0.9; }
+                    100% { transform: translateY(-120px) rotate(720deg); opacity: 0; }
+                }
+                @keyframes pulseGlow {
+                    0%, 100% { text-shadow: 0 0 20px #0284c7, 0 0 40px #0369a1, 0 0 80px #0284c7; }
+                    50%       { text-shadow: 0 0 40px #0369a1, 0 0 80px #0284c7, 0 0 120px #0369a1; }
+                }
+                @keyframes shimmer {
+                    0%   { background-position: -200% center; }
+                    100% { background-position: 200% center; }
+                }
+                .rose-particle {
+                    position: fixed; bottom: -60px; font-size: 2rem;
+                    animation: floatRose linear infinite;
+                    pointer-events: none; z-index: 9999; user-select: none;
+                }
+                .special-title { animation: pulseGlow 2s ease-in-out infinite; }
+                .name-shimmer {
+                    background: linear-gradient(90deg, #0284c7, #fff, #38bdf8, #fff, #0284c7);
+                    background-size: 200% auto;
+                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                    animation: shimmer 2s linear infinite;
+                    display: inline-block;
+                }
+            </style>
+
+            <div id="roseContainer"></div>
+
+            <div class="min-h-[60vh] flex items-center justify-center">
+                <div class="text-center p-10 rounded-3xl shadow-2xl border-4 border-blue-300 relative overflow-hidden"
+                    style="background: linear-gradient(135deg, #e0f2fe, #f0f9ff, #bae6fd, #7dd3fc); max-width: 500px; width: 100%;">
+                    <div class="absolute top-0 left-0 w-28 h-28 rounded-full opacity-20" style="background: radial-gradient(circle, #38bdf8, transparent); transform: translate(-30%,-30%)"></div>
+                    <div class="absolute bottom-0 right-0 w-36 h-36 rounded-full opacity-20" style="background: radial-gradient(circle, #0284c7, transparent); transform: translate(30%,30%)"></div>
+
+                    <div class="text-4xl mb-4 animate-bounce">🌹🌹🌹</div>
+                    <div class="special-title text-3xl font-black mb-2" style="color: #0369a1; font-family: 'Cairo', sans-serif;">
+                        أهلاً وسهلاً
+                    </div>
+                    <div class="name-shimmer text-4xl font-black mb-6" style="font-family: 'Cairo', sans-serif;">
+                        ${displayName}
+                    </div>
+                    <p class="text-blue-700 font-bold text-lg mb-8 leading-relaxed" style="font-family: 'Cairo', sans-serif;">
+                        سيستم متابعة عمله ولدك م/ حازم<br>
+                        <span class="text-xl text-blue-600">نتمنى يعجبكم 💙</span>
+                    </p>
+                    <button onclick="Moderator._continueFromWelcome()"
+                        class="px-8 py-3 rounded-full font-black text-white text-lg shadow-lg transition transform hover:scale-105 active:scale-95"
+                        style="background: linear-gradient(135deg, #0284c7, #38bdf8); box-shadow: 0 4px 15px rgba(2,132,199,0.4);">
+                        <i class="fas fa-arrow-left ml-2"></i>الدخول للنظام
+                    </button>
+                </div>
+            </div>
+        `;
+
+        this._specialName = displayName; // ✨ Store for later
+
+        // ✨ Spawn floating roses
+        const roses = ['🌹', '🌹', '💐', '💙', '💠'];
+        const container = document.getElementById('roseContainer');
+        let count = 0;
+        const spawnRose = () => {
+            if (count > 80) return;
+            const rose = document.createElement('span');
+            rose.className = 'rose-particle';
+            rose.textContent = roses[Math.floor(Math.random() * roses.length)];
+            rose.style.left = Math.random() * 100 + 'vw';
+            rose.style.fontSize = (1.5 + Math.random() * 2) + 'rem';
+            const dur = 4 + Math.random() * 5;
+            rose.style.animationDuration = dur + 's';
+            rose.style.animationDelay = Math.random() * 2 + 's';
+            container.appendChild(rose);
+            count++;
+            setTimeout(() => rose.remove(), (dur + 2) * 1000);
+        };
+        for (let i = 0; i < 30; i++) setTimeout(spawnRose, i * 200);
+        const interval = setInterval(spawnRose, 600);
+        setTimeout(() => clearInterval(interval), 20000);
+    },
+
+    // ✨ Applies/re-applies the blue theme to the green welcome card + page
+    _applyBlueTheme(name) {
+        name = name || this._specialName || '';
+        document.body.style.background = 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #7dd3fc 100%)';
+
+        // Blue the green dashboard banner card
+        const welcomeCard = document.getElementById('dashWelcome')?.closest('div[class*="bg-gradient"]') ||
+            document.querySelector('#view-dashboard > .space-y-6 > div:first-child') ||
+            document.querySelector('.bg-gradient-to-l.from-emerald-600');
+        if (welcomeCard) {
+            welcomeCard.style.background = 'linear-gradient(135deg, #0284c7, #38bdf8, #7dd3fc)';
+            welcomeCard.style.boxShadow = '0 8px 30px rgba(2,132,199,0.35)';
+            welcomeCard.style.borderBottom = '3px solid rgba(255,255,255,0.3)';
+        }
+
+        // Update the welcome text
+        const welcomeEl = document.getElementById('dashWelcome');
+        if (welcomeEl) {
+            welcomeEl.textContent = '💙 ' + name + ' 💙';
+            welcomeEl.style.color = 'white';
+        }
+        const roleEl = document.getElementById('dashRole');
+        if (roleEl) {
+            roleEl.textContent = '💙 الأم الغالية 💙';
+            roleEl.style.color = 'rgba(255,255,255,0.9)';
+        }
+    },
+
+    _continueFromWelcome() {
+        // ✨ Remove welcome roses
+        document.querySelectorAll('.rose-particle').forEach(r => r.remove());
+
+        // ✨ Render normal UI
+        Moderator.loadData().then(() => {
+            // ✨ Re-apply blue theme after render (slight delay so DOM updates)
+            setTimeout(() => Moderator._applyBlueTheme(Moderator._specialName), 50);
+
+            // ✨ Spawn soft background roses during work session
+            const roses = ['🌹', '💙', '🌹'];
+            const spawnBg = () => {
+                const rose = document.createElement('span');
+                rose.className = 'rose-particle';
+                rose.textContent = roses[Math.floor(Math.random() * roses.length)];
+                rose.style.left = Math.random() * 100 + 'vw';
+                rose.style.fontSize = (0.8 + Math.random() * 1) + 'rem';
+                rose.style.opacity = '0.4';
+                const dur = 8 + Math.random() * 6;
+                rose.style.animationDuration = dur + 's';
+                document.body.appendChild(rose);
+                setTimeout(() => rose.remove(), (dur + 1) * 1000);
+            };
+            const bgInterval = setInterval(spawnBg, 4000);
+            setTimeout(() => clearInterval(bgInterval), 30 * 60 * 1000); // 30 mins
+        });
     }
 
 };

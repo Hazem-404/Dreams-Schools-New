@@ -6,9 +6,114 @@ const Admin = {
     lookups: { teachers: [], classes: [], subjects: [], students: [] },
 
     async init() {
-        document.getElementById('adminTabs').classList.remove('hidden');
+        if (!App.user || App.user.role !== 'Admin') {
+            document.getElementById('dashboardContent').innerHTML = '<div class="p-10 text-center text-red-500 font-bold text-xl">غير مصرح لك بالدخول لهذه الصفحة 🚫</div>';
+            return;
+        }
 
-        // Reset visibility
+        const tabsHtml = `
+            <!-- Nav Row -->
+            <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-2 flex flex-wrap gap-1 items-center z-50 relative">
+                <!-- 1. Dashboard - always visible -->
+                <button onclick="Admin.switchTab('Stats')" data-tab="Stats"
+                    class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 transition-all">
+                    <i class="fas fa-home text-emerald-500"></i>
+                    <span>الرئيسية</span>
+                </button>
+
+                <div class="w-px h-6 bg-gray-200 mx-1"></div>
+
+                <!-- 2. Academic Group -->
+                <div class="relative group" id="grp-Academic">
+                    <button class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-teal-50 hover:text-teal-700 transition-all">
+                        <i class="fas fa-graduation-cap text-teal-500"></i>
+                        <span>التعليم</span>
+                        <i class="fas fa-chevron-down text-xs opacity-40 mr-1"></i>
+                    </button>
+                    <div class="absolute top-full right-0 pt-2 w-52 hidden group-hover:block z-50">
+                        <div class="bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden p-1">
+                            <button onclick="Admin.switchTab('Classes')" data-tab="Classes" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-teal-50 hover:text-teal-700 rounded-xl transition">
+                                <i class="fas fa-chalkboard w-4 text-teal-400"></i>الفصول
+                            </button>
+                            <button onclick="Admin.switchTab('Subjects')" data-tab="Subjects" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-teal-50 hover:text-teal-700 rounded-xl transition">
+                                <i class="fas fa-book w-4 text-teal-400"></i>المواد الدراسية
+                            </button>
+                            <button onclick="Admin.switchTab('Allocations')" data-tab="Allocations" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-teal-50 hover:text-teal-700 rounded-xl transition">
+                                <i class="fas fa-link w-4 text-teal-400"></i>توزيع المعلمين
+                            </button>
+                            <button onclick="Admin.switchTab('Enrollments')" data-tab="Enrollments" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-teal-50 hover:text-teal-700 rounded-xl transition">
+                                <i class="fas fa-user-graduate w-4 text-teal-400"></i>قيود الفصول
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. People Group -->
+                <div class="relative group" id="grp-People">
+                    <button class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition-all">
+                        <i class="fas fa-users text-blue-500"></i>
+                        <span>الأفراد</span>
+                        <i class="fas fa-chevron-down text-xs opacity-40 mr-1"></i>
+                    </button>
+                    <div class="absolute top-full right-0 pt-2 w-52 hidden group-hover:block z-50">
+                        <div class="bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden p-1">
+                            <button onclick="Admin.switchTab('Users')" data-tab="Users" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition">
+                                <i class="fas fa-user-shield w-4 text-blue-400"></i>المستخدمين
+                            </button>
+                            <button onclick="Admin.switchTab('StudentsManagement')" data-tab="StudentsManagement" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition">
+                                <i class="fas fa-users-cog w-4 text-blue-400"></i>إدارة الطلاب
+                            </button>
+                            <button onclick="Admin.switchTab('ParentsManagement')" data-tab="ParentsManagement" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition">
+                                <i class="fas fa-user-friends w-4 text-blue-400"></i>أولياء الأمور
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-px h-6 bg-gray-200 mx-1"></div>
+
+                <!-- 4. Supervision Group -->
+                <div class="relative group" id="grp-Supervision">
+                    <button class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-violet-50 hover:text-violet-700 transition-all">
+                        <i class="fas fa-shield-alt text-violet-500"></i>
+                        <span>الإشراف</span>
+                        <i class="fas fa-chevron-down text-xs opacity-40 mr-1"></i>
+                    </button>
+                    <div class="absolute top-full right-0 pt-2 w-56 hidden group-hover:block z-50">
+                        <div class="bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden p-1">
+                            <button onclick="Admin.switchTab('Monitoring')" data-tab="Monitoring" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition">
+                                <i class="fas fa-chart-bar w-4 text-emerald-500"></i>لوحة المتابعة
+                            </button>
+                            <button onclick="Admin.switchTab('ClassControl')" data-tab="ClassControl" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition">
+                                <i class="fas fa-edit w-4 text-emerald-500"></i>تسجيل الحصص
+                            </button>
+                            <button onclick="Admin.switchTab('LogsHistory')" data-tab="LogsHistory" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition">
+                                <i class="fas fa-history w-4 text-blue-500"></i>سجل الحصص الشامل
+                            </button>
+                            <button onclick="Admin.switchTab('Reviews')" data-tab="Reviews" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-violet-50 hover:text-violet-700 rounded-xl transition">
+                                <i class="fas fa-check-double w-4 text-violet-500"></i>مراجعة السجلات
+                            </button>
+                            <button onclick="Admin.switchTab('AssessEntry')" data-tab="AssessEntry" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-purple-50 hover:text-purple-700 rounded-xl transition">
+                                <i class="fas fa-pen w-4 text-purple-500"></i>تسجيل التقييمات
+                            </button>
+                            <button onclick="Admin.switchTab('AssessReviews')" data-tab="AssessReviews" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-amber-50 hover:text-amber-700 rounded-xl transition">
+                                <i class="fas fa-star w-4 text-amber-500"></i>مراجعة التقييمات
+                            </button>
+                            <div class="border-t border-gray-100 my-1"></div>
+                            <button onclick="Admin.switchTab('Warnings')" data-tab="Warnings" class="w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 rounded-xl transition">
+                                <i class="fas fa-exclamation-triangle w-4 text-red-500"></i>الإنذارات والمخالفات
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const tabsContainer = document.getElementById('adminTabs');
+        tabsContainer.innerHTML = tabsHtml;
+        tabsContainer.classList.remove('hidden');
+
+        // Reset visibility just in case
         document.querySelectorAll('#adminTabs .group, #adminTabs button').forEach(el => el.classList.remove('hidden'));
 
         this.switchTab('Users'); // Default to Users for now as requested? Or keep Stats. Keep Stats.
@@ -31,6 +136,7 @@ const Admin = {
     currentHeader: [],
 
     async switchTab(tab) {
+        if (!App.user || App.user.role !== 'Admin') return;
         this.currentTab = tab;
 
         // Reset Styles
@@ -154,7 +260,7 @@ const Admin = {
                     </select>
                     <select id="filterTeacher" onchange="Admin.applyFilters()" class="p-2 border rounded-lg text-sm outline-none focus:border-emerald-500">
                         <option value="">كل المعلمين</option>
-                        ${this.lookups.teachers.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+                        ${[...this.lookups.teachers].sort((a, b) => a.name.localeCompare(b.name, 'ar')).map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
                     </select>
                     ${searchBox}
                 </div>
@@ -430,7 +536,26 @@ const Admin = {
             }
             // 4. Allocations - Subject (Col 3)
             else if (type === 'Allocations' && i === 3) {
-                inputField = this.buildSelect(i, this.lookups.subjects, row[i]);
+                if (isNew) {
+                    inputField = `
+                        <div class="mb-1 flex justify-end">
+                            <label class="cursor-pointer text-emerald-600 hover:text-emerald-700 text-xs font-bold flex items-center gap-1">
+                                <input type="checkbox" onchange="document.querySelectorAll('.adminAllocSubjectCb').forEach(cb => cb.checked = this.checked)" class="w-3 h-3 accent-emerald-600 rounded">
+                                تحديد الكل
+                            </label>
+                        </div>
+                        <div class="bg-gray-50 border border-gray-200 rounded-xl max-h-32 overflow-y-auto p-2 border-gray-300 custom-scrollbar">
+                            ${this.lookups.subjects.map(s => `
+                                <label class="flex items-center gap-2 mb-1 cursor-pointer p-1 hover:bg-gray-100 rounded transition">
+                                    <input type="checkbox" value="${s.id}" class="adminAllocSubjectCb w-4 h-4 accent-emerald-600 rounded">
+                                    <span class="font-bold text-gray-700">${s.name}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    inputField = this.buildSelect(i, this.lookups.subjects, row[i]);
+                }
             }
             // 5. Enrollments - Student (Col 1)
             else if (type === 'Enrollments' && i === 1) {
@@ -480,11 +605,12 @@ const Admin = {
     },
 
     buildSelect(idx, list, selectedVal) {
+        const sortedList = (list === this.lookups.teachers) ? [...list].sort((a, b) => a.name.localeCompare(b.name, 'ar')) : list;
         return `
             <div class="relative">
                 <select id="edit_f_${idx}" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition text-gray-700 font-bold" required>
                     <option value="">-- اختر --</option>
-                    ${list.map(item => `<option value="${item.id}" ${String(item.id) === String(selectedVal) ? 'selected' : ''}>${item.displayName || item.name}</option>`).join('')}
+                    ${sortedList.map(item => `<option value="${item.id}" ${String(item.id) === String(selectedVal) ? 'selected' : ''}>${item.displayName || item.name}</option>`).join('')}
                 </select>
                 <div class="absolute left-3 top-3.5 text-gray-400 pointer-events-none"><i class="fas fa-chevron-down"></i></div>
             </div>
@@ -498,29 +624,55 @@ const Admin = {
     async saveData() {
         const { type, id, isNew } = this.tempEdit;
         const header = this.cache[type].header;
-        const newData = header.map((_, i) => document.getElementById(`edit_f_${i}`).value);
 
         UI.loader(true);
         try {
-            let res;
-            if (isNew) {
-                res = await App.call('adminSaveData', { type, data: newData });
-            } else {
-                res = await App.call('adminUpdateData', { type, id, data: newData });
-                // Refresh Lookups if we modified lookup tables
-                if (['Users', 'Classes', 'Subjects'].includes(type)) {
-                    const l = await App.call('getAdminLookups');
-                    if (l.success) this.lookups = l;
-                }
-            }
+            if (isNew && type === 'Allocations') {
+                const teacherId = document.getElementById('edit_f_1').value;
+                const classId = document.getElementById('edit_f_2').value;
+                const subjectCbs = document.querySelectorAll('.adminAllocSubjectCb:checked');
+                const subjectIds = Array.from(subjectCbs).map(cb => cb.value);
 
-            if (res.success) {
-                UI.showError("تم الحفظ بنجاح");
-                this.closeEdit();
-                this._clearAdminCache('tab_' + type); // Invalidate this tab's cache
-                this.switchTab(type); // Reload UI
+                if (!teacherId || !classId || subjectIds.length === 0) throw new Error("يرجى ملء جميع الحقول");
+
+                const year = new Date().getFullYear();
+                let allSuccess = true;
+                for (const subjId of subjectIds) {
+                    const rowData = ["AUTO", teacherId, classId, subjId, year];
+                    const res = await App.call('adminSaveData', { type: 'Allocations', data: rowData });
+                    if (!res.success) {
+                        alert(res.message);
+                        allSuccess = false;
+                        break;
+                    }
+                }
+                if (allSuccess) {
+                    UI.showError("تم الحفظ بنجاح");
+                    this.closeEdit();
+                    this._clearAdminCache('tab_' + type);
+                    this.switchTab(type);
+                }
             } else {
-                alert(res.message);
+                const newData = header.map((_, i) => document.getElementById(`edit_f_${i}`).value);
+                let res;
+                if (isNew) {
+                    res = await App.call('adminSaveData', { type, data: newData });
+                } else {
+                    res = await App.call('adminUpdateData', { type, id, data: newData });
+                    if (['Users', 'Classes', 'Subjects'].includes(type)) {
+                        const l = await App.call('getAdminLookups');
+                        if (l.success) this.lookups = l;
+                    }
+                }
+
+                if (res.success) {
+                    UI.showError("تم الحفظ بنجاح");
+                    this.closeEdit();
+                    this._clearAdminCache('tab_' + type);
+                    this.switchTab(type);
+                } else {
+                    alert(res.message);
+                }
             }
         } catch (e) { alert(e.message); }
         UI.loader(false);
@@ -738,7 +890,7 @@ const Admin = {
                             ${this.lookups.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
                         </select>
                     </div>
-                    <button onclick="Admin.openClassLog()" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-700 transition transform active:scale-[0.98]">
+                    <button onclick="Admin.openClassLog()" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-700 transition transform active:scale-95">
                         <i class="fas fa-arrow-left ml-2"></i>فتح السجل
                     </button>
                 </div>
@@ -1558,69 +1710,92 @@ const Admin = {
 
     // --- Warnings Module ---
 
-    renderWarnings() {
+    async renderWarnings() {
         const content = document.getElementById('dashboardContent');
-        const html = `
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
-                <!-- Sidebar: Selection & Form -->
-                <div class="space-y-6">
-                    <!-- Selection -->
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                        <h3 class="font-bold text-gray-700 mb-4 border-b pb-2">1. اختيار الطالب</h3>
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">الفصل</label>
-                                <select id="warnClassSelect" onchange="Admin.loadWarnStudents(this.value)" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold text-gray-700">
-                                    <option value="">اختر الفصل...</option>
-                                    ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
-                                </select>
+        content.innerHTML = '<div class="spinner mx-auto border-gray-300 border-t-red-600 mt-10"></div>';
+
+        try {
+            const res = await App.call('getAllWarnings'); // Use Moderator's backend function
+            if (!res.success) throw new Error(res.message);
+
+            this._allWarnings = res.warnings; // Store all warnings for filtering
+
+            const html = `
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 animate-fadeIn">
+                    <!-- Sidebar: Selection & Form -->
+                    <div class="space-y-6 md:col-span-1">
+                        <!-- Selection -->
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                            <h3 class="font-bold text-gray-700 mb-4 border-b pb-2">1. إصدار إنذار جديد</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">الفصل</label>
+                                    <select id="warnClassSelect" onchange="Admin.loadWarnStudents(this.value)" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold text-gray-700">
+                                        <option value="">اختر الفصل...</option>
+                                        ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">الطالب</label>
+                                    <select id="warnStudentSelect" onchange="Admin.loadStudentWarnings(this.value)" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold text-gray-700" disabled>
+                                        <option value="">اختر الفصل أولاً...</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">الطالب</label>
-                                <select id="warnStudentSelect" onchange="Admin.loadStudentWarnings(this.value)" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-bold text-gray-700" disabled>
-                                    <option value="">اختر الفصل أولاً...</option>
-                                </select>
+                        </div>
+
+                        <!-- Add Warning Form -->
+                        <div id="addWarningForm" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hidden border-t-4 border-t-red-500">
+                            <h3 class="font-bold text-red-600 mb-4 flex items-center"><i class="fas fa-exclamation-circle ml-2"></i>تفاصيل الإنذار</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">نوع الإنذار</label>
+                                    <select id="warnType" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-bold text-gray-700">
+                                        <option value="Behavior">سلوك (Behavior)</option>
+                                        <option value="Attendance">غياب (Attendance)</option>
+                                        <option value="Academic">أكاديمي (Academic)</option>
+                                        <option value="Dismissal">فصل (Dismissal)</option>
+                                        <option value="Other">أخرى (Other)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">التفاصيل / ملاحظات</label>
+                                    <textarea id="warnDetails" rows="4" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 placeholder-gray-400 font-medium" placeholder="اكتب تفاصيل المخالفة هنا..."></textarea>
+                                </div>
+                                <button onclick="Admin.submitWarning()" class="w-full bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700 transition shadow-md flex justify-center items-center gap-2">
+                                    <i class="fas fa-paper-plane"></i> إصدار الإنذار
+                                </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Add Warning Form -->
-                    <div id="addWarningForm" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hidden border-t-4 border-t-red-500">
-                        <h3 class="font-bold text-red-600 mb-4 flex items-center"><i class="fas fa-exclamation-circle ml-2"></i>إصدار إنذار جديد</h3>
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">نوع الإنذار</label>
-                                <select id="warnType" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-bold text-gray-700">
-                                    <option value="Behavior">سلوك (Behavior)</option>
-                                    <option value="Attendance">غياب (Attendance)</option>
-                                    <option value="Academic">أكاديمي (Academic)</option>
-                                    <option value="Dismissal">فصل (Dismissal)</option>
-                                    <option value="Other">أخرى (Other)</option>
+                    <!-- Main: Global Warnings Log -->
+                    <div class="md:col-span-3">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 items-end animate-fadeIn">
+                            <div class="flex-grow w-full md:w-1/3">
+                                <label class="block text-gray-500 text-sm font-bold mb-2">بحث باسم الطالب</label>
+                                <input type="text" id="adminWarnSearch" oninput="Admin.applyAdminWarningsFilters()" class="w-full p-2 border rounded-lg bg-gray-50 outline-none focus:border-red-500 font-bold text-gray-700" placeholder="اكتب اسم الطالب...">
+                            </div>
+                            <div class="flex-grow w-full md:w-1/3">
+                                <label class="block text-gray-500 text-sm font-bold mb-2">تصفية بالفصل</label>
+                                <select id="adminWarnClass" onchange="Admin.applyAdminWarningsFilters()" class="w-full p-2 border rounded-lg bg-gray-50 outline-none focus:border-red-500 font-bold text-gray-700">
+                                    <option value="">-- كل الفصول --</option>
+                                    ${this.lookups.classes.map(c => `<option value="${c.displayName}">${c.displayName}</option>`).join('')}
                                 </select>
                             </div>
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-1">التفاصيل / ملاحظات</label>
-                                <textarea id="warnDetails" rows="4" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 placeholder-gray-400 font-medium" placeholder="اكتب تفاصيل المخالفة هنا..."></textarea>
-                            </div>
-                            <button onclick="Admin.submitWarning()" class="w-full bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700 transition shadow-md flex justify-center items-center gap-2">
-                                <i class="fas fa-paper-plane"></i> إصدار الإنذار
-                            </button>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Main: Warnings List -->
-                <div class="md:col-span-2">
-                    <div id="warningsList" class="space-y-4">
-                        <div class="text-center text-gray-400 py-20 bg-gray-50 rounded-xl border-dashed border-2 border-gray-200">
-                            <i class="fas fa-user-slash text-4xl mb-4 opacity-50"></i>
-                            <p class="font-bold">يرجى اختيار طالب لعرض سجل الإنذارات</p>
+                        <div id="warningsList" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                            <!-- Populated by JS -->
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
-        content.innerHTML = html;
+            `;
+            content.innerHTML = html;
+            this.applyAdminWarningsFilters();
+        } catch (e) {
+            content.innerHTML = `<div class="text-red-500 text-center p-4 bg-red-50 rounded-xl border border-red-100">${e.message}</div>`;
+        }
     },
 
     async loadWarnStudents(classId) {
@@ -1664,15 +1839,77 @@ const Admin = {
         listContainer.innerHTML = '<div class="spinner mx-auto border-gray-300 border-t-red-600"></div>';
 
         try {
-            const res = await App.call('getStudentWarnings', { studentId });
-            if (res.success) {
-                this.renderWarningsList(res.warnings);
-            } else {
-                listContainer.innerHTML = `<div class="text-red-500">${res.message}</div>`;
-            }
+            // Filter from the already loaded _allWarnings
+            const studentWarnings = this._allWarnings.filter(w => String(w.studentId) === String(studentId));
+            this.renderWarningsList(studentWarnings);
         } catch (e) {
             listContainer.innerHTML = `<div class="text-red-500">${e.message}</div>`;
         }
+    },
+
+    applyAdminWarningsFilters() {
+        if (!this._allWarnings) return;
+        const search = document.getElementById('adminWarnSearch').value.toLowerCase().trim();
+        const cls = document.getElementById('adminWarnClass').value;
+
+        let filtered = this._allWarnings;
+        if (search) filtered = filtered.filter(w => w.studentName.toLowerCase().includes(search));
+        if (cls) filtered = filtered.filter(w => w.className === cls);
+
+        this.renderAdminWarningsTable(filtered);
+    },
+
+    renderAdminWarningsTable(warnings) {
+        const container = document.getElementById('warningsList');
+        if (!warnings || warnings.length === 0) {
+            container.innerHTML = `<div class="p-10 text-center text-gray-500"><i class="fas fa-inbox text-4xl mb-3 block opacity-50"></i>لا توجد إنذارات مسجلة تطابق بحثك</div>`;
+            return;
+        }
+
+        const uiType = (t) => {
+            if (t === 'Absence' || t === 'Attendance') return '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold inline-block text-center border border-blue-200">غياب</span>';
+            if (t === 'Behavior') return '<span class="bg-teal-100 text-teal-700 px-2 py-1 rounded text-xs font-bold inline-block text-center border border-teal-200">سلوك</span>';
+            if (t === 'Academic') return '<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold inline-block text-center border border-orange-200">أكاديمي</span>';
+            if (t === 'Dismissal') return '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold inline-block text-center border border-red-200">فصل</span>';
+            return `<span class="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-bold inline-block text-center border border-gray-200">${t}</span>`;
+        };
+
+        const html = `
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-sm">
+                    <thead class="bg-gray-50 border-b border-gray-200 text-gray-600">
+                        <tr>
+                            <th class="p-4 font-bold rounded-tr-lg w-1/4">الطالب</th>
+                            <th class="p-4 font-bold w-1/6">الفصل</th>
+                            <th class="p-4 font-bold w-1/6">النوع</th>
+                            <th class="p-4 font-bold w-1/5">التاريخ / المرسل</th>
+                            <th class="p-4 font-bold">التفاصيل</th>
+                            <th class="p-4 font-bold rounded-tl-lg">حذف</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        ${warnings.map(w => `
+                            <tr class="hover:bg-red-50/30 transition">
+                                <td class="p-4 font-bold text-gray-800">${UI.formatName(w.studentName)}</td>
+                                <td class="p-4 text-gray-600 font-bold">${w.className}</td>
+                                <td class="p-4">${uiType(w.type)}</td>
+                                <td class="p-4">
+                                    <div class="font-bold text-gray-700 text-xs">${w.date}</div>
+                                    <div class="text-[10px] text-gray-400 mt-1"><i class="fas fa-user-shield ml-1"></i>${w.createdBy || 'الإدارة'}</div>
+                                </td>
+                                <td class="p-4 text-gray-600 text-xs leading-relaxed max-w-xs truncate" title="${w.details.replace(/"/g, '&quot;')}">${w.details || '-'}</td>
+                                <td class="p-4">
+                                     <button onclick="Admin.deleteWarning('${w.id}')" class="text-red-400 hover:text-red-600 hover:bg-red-100 p-2 rounded-lg transition" title="حذف الإنذار">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        container.innerHTML = html;
     },
 
     renderWarningsList(warnings) {
@@ -1758,8 +1995,13 @@ const Admin = {
 
             if (res.success) {
                 document.getElementById('warnDetails').value = ''; // Reset form
+                // Re-fetch all warnings to update the cache, then reload student warnings
+                const allWarningsRes = await App.call('getAllWarnings');
+                if (allWarningsRes.success) {
+                    this._allWarnings = allWarningsRes.warnings;
+                }
                 this.loadStudentWarnings(studentId); // Reload list
-                // Optional: Show success toast
+                UI.showError("تم إصدار الإنذار بنجاح", "green");
             } else {
                 alert(res.message);
             }
@@ -1774,9 +2016,14 @@ const Admin = {
         try {
             const res = await App.call('deleteWarning', { warningId });
             if (res.success) {
-                // Reload list
+                // Re-fetch all warnings to update the cache, then reload student warnings
+                const allWarningsRes = await App.call('getAllWarnings');
+                if (allWarningsRes.success) {
+                    this._allWarnings = allWarningsRes.warnings;
+                }
                 const studentId = document.getElementById('warnStudentSelect').value;
                 this.loadStudentWarnings(studentId);
+                UI.showError("تم حذف الإنذار بنجاح", "green");
             } else {
                 alert(res.message);
             }

@@ -46,11 +46,7 @@ const App = {
         if (window.innerWidth < 768) document.getElementById('bottomNav').classList.remove('hidden');
 
         // 3. User Info
-        if (this.user.phone === '01550117880') {
-            document.getElementById('dashWelcome').innerText = `${UI.formatName(this.user.name)}`;
-        } else {
-            document.getElementById('dashWelcome').innerText = `${UI.formatName(this.user.name)}`;
-        }
+        document.getElementById('dashWelcome').innerText = `${UI.formatName(this.user.name)}`;
         const roleMap = { 'Admin': 'الإدارة', 'Teacher': 'هيئة التدريس', 'Parent': 'ولي أمر', 'Supervisor': 'مشرف' };
         document.getElementById('dashRole').innerText = roleMap[this.user.role] || this.user.role;
 
