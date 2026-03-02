@@ -78,6 +78,8 @@ function doPost(e) {
     else if (action === "reviewAssessments") result = reviewAssessments(payload);
     else if (action === "getStudentAssessments") result = getStudentAssessments(payload.studentId);
     else if (action === "getTeacherAssessmentHistory") result = getTeacherAssessmentHistory(payload.userId);
+    else if (action === "getAllAssessmentsHistory") result = getAllAssessmentsHistory();
+    else if (action === "getSupervisorAssessmentHistory") result = getSupervisorAssessmentHistory(payload.classIds);
     
     else result = { success: false, message: "Unknown Action: " + action };
     
@@ -1972,38 +1974,118 @@ function getTeacherAssessmentHistory(userId) {
   if (!sheet || sheet.getLastRow() < 2) return { success: true, batches: [] };
 
   const data = sheet.getDataRange().getValues();
-  const sUserId = String(userId);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("Weekly_Assessments");
+    if (!sheet) return { success: true, history: [] };
 
-  const classMap = {};
-  ss.getSheetByName("Classes").getDataRange().getValues().forEach(r => classMap[r[0]] = r[1] + (r[2] ? " - " + r[2] : ""));
-  const subMap = {};
-  ss.getSheetByName("Subjects").getDataRange().getValues().forEach(r => subMap[r[0]] = r[1]);
-  const studMap = {};
-  ss.getSheetByName("Students").getDataRange().getValues().forEach(r => studMap[r[0]] = r[1]);
+    const data = sheet.getDataRange().getValues();
+    // Group by BatchID (column 0 splits by _)
+    const batches = {};
 
-  const batchMap = {};
-  for (let i = 1; i < data.length; i++) {
-    const r = data[i];
-    if (String(r[4]) !== sUserId) continue;
-
-    const key = r[2] + "_" + r[3] + "_" + r[8] + "_" + new Date(r[1]).toDateString();
-    if (!batchMap[key]) {
-      batchMap[key] = {
-        date: new Date(r[1]).toISOString().split("T")[0],
-        classId: r[2],
-        className: classMap[r[2]] || r[2],
-        subjectId: r[3],
-        subjectName: subMap[r[3]] || r[3],
-        title: r[8],
-        maxScore: r[7],
-        status: r[10],
-        studentCount: 0
-      };
+    for (let i = 1; i < data.length; i++) {
+        const r = data[i];
+        if (String(r[4]) === String(userId)) {
+            const batchId = String(r[0]).split('_').slice(0, 2).join('_'); // A_123456
+            if (!batches[batchId]) {
+                batches[batchId] = {
+                    id: batchId,
+                    date: r[1],
+                    classId: r[2],
+                    subjectId: r[3],
+                    title: r[8],
+                    maxScore: r[7],
+                    status: r[10],
+                    studentCount: 0
+                };
+            }
+            batches[batchId].studentCount++;
+        }
     }
-    batchMap[key].studentCount++;
-  }
 
-  const batches = Object.values(batchMap).sort((a, b) => new Date(b.date) - new Date(a.date));
-  return { success: true, batches };
+    const history = Object.values(batches).sort((a,b) => new Date(b.date) - new Date(a.date));
+    return { success: true, history };
+  } catch (e) {
+    return { success: false, message: e.toString() };
+  }
 }
 
+/**
+ * getAllAssessmentsHistory()
+ * Returns all assessment batches for Admin view.
+ */
+function getAllAssessmentsHistory() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("Weekly_Assessments");
+    if (!sheet) return { success: true, history: [] };
+
+    const data = sheet.getDataRange().getValues();
+    const batches = {};
+
+    for (let i = 1; i < data.length; i++) {
+        const r = data[i];
+        const batchId = String(r[0]).split('_').slice(0, 2).join('_'); // A_123456
+        if (!batches[batchId]) {
+            batches[batchId] = {
+                id: batchId,
+                date: r[1],
+                classId: r[2],
+                subjectId: r[3],
+                title: r[8],
+                maxScore: r[7],
+                status: r[10],
+                teacherId: r[4],
+                studentCount: 0
+            };
+        }
+        batches[batchId].studentCount++;
+    }
+
+    const history = Object.values(batches).sort((a,b) => new Date(b.date) - new Date(a.date));
+    return { success: true, history };
+  } catch (e) {
+    return { success: false, message: e.toString() };
+  }
+}
+
+/**
+ * getSupervisorAssessmentHistory(classIds)
+ * Returns assessment batches for Supervisor's assigned classes.
+ */
+function getSupervisorAssessmentHistory(classIds) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName("Weekly_Assessments");
+    if (!sheet) return { success: true, history: [] };
+
+    const data = sheet.getDataRange().getValues();
+    const batches = {};
+
+    for (let i = 1; i < data.length; i++) {
+        const r = data[i];
+        if (!classIds || classIds.length === 0 || classIds.includes(String(r[2]))) {
+            const batchId = String(r[0]).split('_').slice(0, 2).join('_');
+            if (!batches[batchId]) {
+                batches[batchId] = {
+                    id: batchId,
+                    date: r[1],
+                    classId: r[2],
+                    subjectId: r[3],
+                    title: r[8],
+                    maxScore: r[7],
+                    status: r[10],
+                    teacherId: r[4],
+                    studentCount: 0
+                };
+            }
+            batches[batchId].studentCount++;
+        }
+    }
+
+    const history = Object.values(batches).sort((a,b) => new Date(b.date) - new Date(a.date));
+    return { success: true, history };
+  } catch (e) {
+    return { success: false, message: e.toString() };
+  }
+}

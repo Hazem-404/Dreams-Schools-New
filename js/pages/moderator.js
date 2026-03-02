@@ -50,74 +50,122 @@ const Moderator = {
         const content = document.getElementById('dashboardContent');
         const allowed = this.allowedModules || ['module_supervision', 'module_academic', 'module_people'];
 
-        const tabs = [];
         const hasSup = allowed.includes('module_supervision') || allowed.includes('module_admin');
         const hasAcad = allowed.includes('module_academic') || allowed.includes('module_admin');
 
-        if (hasSup) {
-            // Primary monitoring - highlighted
-            tabs.push(`
-                <button onclick="Moderator.switchTab('Monitoring')" data-tab="Monitoring"
-                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm bg-emerald-600 text-white shadow transition hover:bg-emerald-700">
-                    <i class="fas fa-chart-bar"></i><span>\u0627\u0644\u0645\u062a\u0627\u0628\u0639\u0629 \u0627\u0644\u064a\u0648\u0645\u064a\u0629</span>
-                </button>
-            `);
-        }
-        if (hasSup) {
-            tabs.push(`
-                <button onclick="Moderator.switchTab('ClassControl')" data-tab="ClassControl"
-                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 transition">
-                    <i class="fas fa-edit text-teal-500"></i><span>\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u062d\u0635\u0635</span>
-                </button>
-            `);
-            tabs.push(`
-                <button onclick="Moderator.switchTab('LogsHistory')" data-tab="LogsHistory"
-                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition">
-                    <i class="fas fa-history text-blue-500"></i><span>\u0633\u062c\u0644 \u0627\u0644\u062d\u0635\u0635</span>
-                </button>
-            `);
-            tabs.push(`
-                <button onclick="Moderator.switchTab('Reviews')" data-tab="Reviews"
-                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300 transition">
-                    <i class="fas fa-check-double text-violet-500"></i><span>\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u0633\u062c\u0644\u0627\u062a</span>
-                </button>
-            `);
-            tabs.push(`
-                <button onclick="Moderator.switchTab('AssessReviews')" data-tab="AssessReviews"
-                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition">
-                    <i class="fas fa-star text-amber-500"></i><span>\u0645\u0631\u0627\u062c\u0639\u0629 \u0627\u0644\u062a\u0642\u064a\u064a\u0645\u0627\u062a</span>
-                </button>
-            `);
-        }
-        if (hasAcad) {
-            tabs.push(`
-                <button onclick="Moderator.switchTab('Allocations')" data-tab="Allocations"
-                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 bg-white border border-gray-200 hover:bg-sky-50 hover:text-sky-700 hover:border-sky-300 transition">
-                    <i class="fas fa-chalkboard-teacher text-sky-500"></i><span>\u062a\u0648\u0632\u064a\u0639 \u0627\u0644\u0645\u062f\u0631\u0633\u064a\u0646</span>
-                </button>
-            `);
-        }
-        if (hasSup) {
-            // Warnings - always last and visually distinct
-            tabs.push(`
-                <button onclick="Moderator.switchTab('Warnings')" data-tab="Warnings"
-                    class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-red-600 bg-white border border-red-200 hover:bg-red-50 hover:border-red-400 transition mr-auto">
-                    <i class="fas fa-exclamation-triangle text-red-500"></i><span>\u0627\u0644\u0625\u0646\u0630\u0627\u0631\u0627\u062a</span>
-                </button>
-            `);
-        }
-
-        if (tabs.length === 0) {
+        if (!hasSup && !hasAcad) {
             content.innerHTML = `<div class="p-10 text-center text-gray-400"><i class="fas fa-lock text-4xl mb-4 opacity-30 block"></i><p class="font-bold">\u0644\u064a\u0633 \u0644\u062f\u064a\u0643 \u0635\u0644\u0627\u062d\u064a\u0629 \u0627\u0644\u0648\u0635\u0648\u0644 \u0644\u0623\u064a \u0642\u0633\u0645 \u062d\u0627\u0644\u064a\u0627\u064b.</p><p class="text-sm mt-1">\u062a\u0648\u0627\u0635\u0644 \u0645\u0639 \u0627\u0644\u0645\u062f\u064a\u0631 \u0644\u062a\u0641\u0639\u064a\u0644 \u0635\u0644\u0627\u062d\u064a\u0627\u062a\u0643.</p></div>`;
             return;
         }
 
+        let tabsHtml = '';
+
+        if (hasSup || hasAcad) {
+
+            // 1. التسجيل (Registration)
+            if (hasSup) {
+                tabsHtml += `
+                    <div class="relative group" id="mod-grp-Registration">
+                        <button class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-teal-50 hover:text-teal-700 transition">
+                            <i class="fas fa-edit text-teal-500"></i>
+                            <span>التسجيل</span>
+                            <i class="fas fa-chevron-down text-xs opacity-40 mr-1"></i>
+                        </button>
+                        <div class="absolute top-full right-0 pt-2 w-56 hidden group-[.active]:block group-hover:block z-50">
+                            <div class="bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden p-1">
+                                <button onclick="Moderator.switchTab('ClassControl'); Moderator._closeModMenu('mod-grp-Registration')" data-tab="ClassControl"
+                                    class="tab-btn w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-teal-50 hover:text-teal-700 rounded-xl transition">
+                                    <i class="fas fa-edit w-4 text-teal-500"></i>تسجيل الحصص
+                                </button>
+                                <button onclick="Moderator.switchTab('AssessEntry'); Moderator._closeModMenu('mod-grp-Registration')" data-tab="AssessEntry"
+                                    class="tab-btn w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-purple-50 hover:text-purple-700 rounded-xl transition">
+                                    <i class="fas fa-pen w-4 text-purple-500"></i>تسجيل التقييمات
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 2. السجل (Logs & Monitoring)
+            if (hasSup) {
+                tabsHtml += `
+                    <div class="w-px h-6 bg-gray-200 mx-1 hidden sm:block"></div>
+                    <div class="relative group" id="mod-grp-Logs">
+                        <button class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition">
+                            <i class="fas fa-history text-blue-500"></i>
+                            <span>السجل</span>
+                            <i class="fas fa-chevron-down text-xs opacity-40 mr-1"></i>
+                        </button>
+                        <div class="absolute top-full right-0 pt-2 w-56 hidden group-[.active]:block group-hover:block z-50">
+                            <div class="bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden p-1">
+                                <button onclick="Moderator.switchTab('LogsHistory'); Moderator._closeModMenu('mod-grp-Logs')" data-tab="LogsHistory"
+                                    class="tab-btn w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-xl transition">
+                                    <i class="fas fa-history w-4 text-blue-500"></i>سجل الحصص 
+                                </button>
+                                <button onclick="Moderator.switchTab('Monitoring'); Moderator._closeModMenu('mod-grp-Logs')" data-tab="Monitoring"
+                                    class="tab-btn w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 rounded-xl transition">
+                                    <i class="fas fa-chart-bar w-4 text-emerald-500"></i>المتابعة اليومية
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 5. المراجعات (Reviews)
+            if (hasSup) {
+                tabsHtml += `
+                    <div class="w-px h-6 bg-gray-200 mx-1 hidden sm:block"></div>
+                    <div class="relative group" id="mod-grp-Reviews">
+                        <button class="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-violet-50 hover:text-violet-700 transition">
+                            <i class="fas fa-check-double text-violet-500"></i>
+                            <span>المراجعات</span>
+                            <i class="fas fa-chevron-down text-xs opacity-40 mr-1"></i>
+                        </button>
+                        <div class="absolute top-full right-0 pt-2 w-56 hidden group-[.active]:block group-hover:block z-50">
+                            <div class="bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden p-1">
+                                <button onclick="Moderator.switchTab('AssessReviews'); Moderator._closeModMenu('mod-grp-Reviews')" data-tab="AssessReviews"
+                                    class="tab-btn w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-amber-50 hover:text-amber-700 rounded-xl transition">
+                                    <i class="fas fa-star w-4 text-amber-500"></i>مراجعة التقييمات
+                                </button>
+                                <button onclick="Moderator.switchTab('Reviews'); Moderator._closeModMenu('mod-grp-Reviews')" data-tab="Reviews"
+                                    class="tab-btn w-full text-right flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-violet-50 hover:text-violet-700 rounded-xl transition">
+                                    <i class="fas fa-check-double w-4 text-violet-500"></i>مراجعة السجلات
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 4. توزيع المدرسين (Allocations - Standalone button)
+            if (hasAcad) {
+                tabsHtml += `
+                    <div class="w-px h-6 bg-gray-200 mx-1 hidden sm:block"></div>
+                    <button onclick="Moderator.switchTab('Allocations')" data-tab="Allocations"
+                        class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-sky-50 hover:text-sky-700 transition">
+                        <i class="fas fa-chalkboard-teacher text-sky-500"></i><span>توزيع المدرسين</span>
+                    </button>
+                `;
+            }
+
+            // 3. الإنذارات (Warnings - Standalone button)
+            if (hasSup) {
+                tabsHtml += `
+                    <div class="w-px h-6 bg-gray-200 mx-1 hidden sm:block"></div>
+                    <button onclick="Moderator.switchTab('Warnings')" data-tab="Warnings"
+                        class="tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition sm:mr-auto">
+                        <i class="fas fa-exclamation-triangle text-red-500"></i><span>الإنذارات</span>
+                    </button>
+                `;
+            }
+        }
+
         const html = `
             <!-- Moderator Tabs - Clean Nav Card -->
-            <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-2 mb-6">
-                <div class="flex flex-wrap gap-1.5 items-center">
-                    ${tabs.join('')}
-                </div>
+            <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-2 flex flex-wrap gap-1 items-center mb-6">
+                ${tabsHtml}
             </div>
 
             <!-- Content Area -->
@@ -125,20 +173,43 @@ const Moderator = {
         `;
         content.innerHTML = html;
 
-        // Switch to first available tab
-        const firstTab = document.querySelector('.tab-btn[data-tab]');
-        if (firstTab) this.switchTab(firstTab.dataset.tab);
+        // Mobile touch logic for dropdowns
+        document.querySelectorAll('.relative.group > button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const group = btn.parentElement;
+                const wasActive = group.classList.contains('active');
+                document.querySelectorAll('.relative.group').forEach(g => g.classList.remove('active'));
+                if (!wasActive) group.classList.add('active');
+                e.stopPropagation();
+            });
+        });
+
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.relative.group').forEach(g => g.classList.remove('active'));
+        });
+
+        // Switch to Reviews tab first by default if available, else first available
+        const defaultTab = document.querySelector('.tab-btn[data-tab="Reviews"]') || document.querySelector('.tab-btn[data-tab]');
+        if (defaultTab) this.switchTab(defaultTab.dataset.tab);
+    },
+
+    _closeModMenu(groupId) {
+        document.getElementById(groupId)?.classList.remove('active');
     },
 
     switchTab(tab) {
         // Update Active State
         document.querySelectorAll('.tab-btn').forEach(b => {
             if (b.dataset.tab === tab) {
-                b.classList.remove('bg-white', 'text-gray-600');
-                b.classList.add('bg-emerald-600', 'text-white', 'shadow-md');
+                b.classList.remove('text-gray-600', 'hover:bg-violet-50', 'hover:text-violet-700', 'hover:bg-emerald-50', 'hover:text-emerald-700', 'hover:bg-teal-50', 'hover:text-teal-700', 'hover:bg-blue-50', 'hover:text-blue-700', 'hover:bg-purple-50', 'hover:text-purple-700', 'hover:bg-amber-50', 'hover:text-amber-700', 'hover:bg-sky-50', 'hover:text-sky-700', 'text-red-600', 'hover:bg-red-50', 'hover:text-red-700');
+                b.classList.add('bg-violet-100', 'text-violet-700');
             } else {
-                b.classList.add('bg-white', 'text-gray-600');
-                b.classList.remove('bg-emerald-600', 'text-white', 'shadow-md');
+                b.classList.remove('bg-violet-100', 'text-violet-700');
+                if (b.dataset.tab === 'Warnings') {
+                    b.classList.add('text-red-600', 'hover:bg-red-50', 'hover:text-red-700');
+                } else {
+                    b.classList.add('text-gray-600', 'hover:bg-gray-50');
+                }
             }
         });
 
@@ -149,6 +220,7 @@ const Moderator = {
         else if (tab === 'ClassControl') this.renderClassControl();
         else if (tab === 'Warnings') this.renderWarnings();
         else if (tab === 'AssessReviews') this.renderAssessReviews();
+        else if (tab === 'AssessEntry') this.renderAssessEntry();
     },
 
     renderMonitoring() {
@@ -1307,5 +1379,250 @@ const Moderator = {
         }
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
     },
+
+    // ============================================
+    // ASSESSMENTS ENTRY
+    // ============================================
+
+    renderAssessEntry() {
+        const today = new Date().toISOString().split('T')[0];
+        const container = document.getElementById('modContent');
+        const html = `
+            <div class="space-y-6 animate-fadeIn max-w-4xl mx-auto">
+                <!-- Header -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
+                    <div class="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 text-purple-600">
+                        <i class="fas fa-pen text-3xl"></i>
+                    </div>
+                    <h3 class="font-bold text-xl text-gray-800">إدارة التقييمات</h3>
+                    <p class="text-gray-500 text-sm">أدخل تقييمات الطلاب للفصول والمواد المسندة إليك واستعرض السجل</p>
+                </div>
+
+                <!-- Sub-tabs -->
+                <div class="flex flex-wrap justify-center gap-2 bg-white p-2 text-center rounded-xl shadow-sm border border-gray-100 sm:w-fit sm:mx-auto">
+                    <button onclick="Moderator._showAssessSubTab('enter')" id="mod_asub_enter" class="flex-1 min-w-[120px] px-3 py-2 rounded-lg font-bold text-sm bg-purple-100 text-purple-700 transition">
+                        <i class="fas fa-pen ml-1"></i>تسجيل تقييم
+                    </button>
+                    <button onclick="Moderator._showAssessSubTab('history')" id="mod_asub_history" class="flex-1 min-w-[120px] px-3 py-2 rounded-lg font-bold text-sm text-gray-500 hover:bg-gray-50 transition">
+                        <i class="fas fa-list ml-1"></i>سجل التقييمات
+                    </button>
+                </div>
+
+                <!-- Entry Form -->
+                <div id="modAssessEntryForm">
+                    <!-- Class/Subject Selector -->
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-500 text-sm font-bold mb-2">الفصل</label>
+                            <div class="relative">
+                                <select id="modAssessClassSelect" onchange="Moderator._loadAssessStudents(this.value)" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none outline-none focus:ring-2 focus:ring-purple-500 text-sm font-bold text-gray-700">
+                                    <option value="">-- اختر الفصل --</option>
+                                    ${this.lookups.classes.map(c => `<option value="${c.id}">${c.displayName}</option>`).join('')}
+                                </select>
+                                <div class="absolute left-4 top-4 text-purple-600 pointer-events-none"><i class="fas fa-chevron-down"></i></div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-gray-500 text-sm font-bold mb-2">المادة</label>
+                            <div class="relative">
+                                <select id="modAssessSubjectSelect" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl appearance-none outline-none focus:ring-2 focus:ring-purple-500 text-sm font-bold text-gray-700">
+                                    <option value="">-- اختر المادة --</option>
+                                    ${this.lookups.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                                </select>
+                                <div class="absolute left-4 top-4 text-purple-600 pointer-events-none"><i class="fas fa-chevron-down"></i></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Assessment Details -->
+                    <div id="assessDetails" class="hidden">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-gray-500 text-xs font-bold mb-1">عنوان التقييم <span class="text-red-400">*</span></label>
+                                    <input type="text" id="assessTitle" placeholder="مثال: الأسبوع الأول" class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 font-bold text-gray-700">
+                                </div>
+                                <div>
+                                    <label class="block text-gray-500 text-xs font-bold mb-1">التاريخ <span class="text-red-400">*</span></label>
+                                    <input type="date" id="assessDate" value="${today}" class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 font-bold text-gray-700">
+                                </div>
+                                <div>
+                                    <label class="block text-gray-500 text-xs font-bold mb-1">الدرجة الكاملة <span class="text-red-400">*</span></label>
+                                    <input type="number" id="assessMaxScore" min="1" max="100" value="10" class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 font-bold text-gray-700">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Student Grades -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                            <div class="p-4 bg-purple-50 border-b border-purple-100 flex justify-between items-center">
+                                <div class="font-bold text-purple-800"><i class="fas fa-users ml-2"></i>درجات الطلاب</div>
+                                <button onclick="Moderator._fillAllScores()" class="text-xs font-bold bg-purple-100 text-purple-700 px-3 py-1 rounded-lg hover:bg-purple-200 transition">تعبئة الكل بالدرجة الكاملة</button>
+                            </div>
+                            <div id="assessStudentList" class="divide-y divide-gray-100 max-h-[420px] overflow-y-auto custom-scrollbar"></div>
+                            <div class="p-4 border-t bg-gray-50">
+                                <button onclick="Moderator.submitAssessments()" class="w-full bg-purple-600 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-purple-700 transition transform active:scale-95">
+                                    <i class="fas fa-save ml-2"></i> حفظ التقييمات
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History -->
+                <div id="modAssessHistory" class="hidden">
+                    <div class="text-center py-10"><div class="spinner mx-auto border-gray-300 border-t-purple-600"></div></div>
+                </div>
+            </div>
+        `;
+        container.innerHTML = html;
+    },
+
+    _showAssessSubTab(tab) {
+        document.getElementById('mod_asub_enter').className = `px-5 py-2 rounded-lg font-bold text-sm transition ${tab === 'enter' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:bg-gray-50'}`;
+        document.getElementById('mod_asub_history').className = `px-5 py-2 rounded-lg font-bold text-sm transition ${tab === 'history' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:bg-gray-50'}`;
+        document.getElementById('modAssessEntryForm').classList.toggle('hidden', tab !== 'enter');
+        document.getElementById('modAssessHistory').classList.toggle('hidden', tab !== 'history');
+        if (tab === 'history') this._loadAssessHistory();
+    },
+
+    async _loadAssessHistory() {
+        const container = document.getElementById('modAssessHistory');
+        container.innerHTML = '<div class="text-center py-10"><div class="spinner mx-auto border-gray-300 border-t-purple-600"></div></div>';
+        try {
+            const classIds = this.lookups.classes.map(c => c.id);
+            const res = await App.call('getSupervisorAssessmentHistory', { classIds });
+            if (!res.success) throw new Error(res.message);
+
+            if (!res.history || res.history.length === 0) {
+                container.innerHTML = '<div class="p-10 text-center text-gray-400 bg-white rounded-xl shadow-sm font-bold">لا توجد تقييمات مسجلة بعد للفصول الموكلة إليك</div>';
+                return;
+            }
+
+            container.innerHTML = '<div class="grid gap-4 md:grid-cols-2">' + res.history.map(b => {
+                const cname = this.lookups.classes.find(c => c.id == b.classId)?.displayName || b.classId;
+                const sname = this.lookups.subjects.find(s => s.id == b.subjectId)?.name || b.subjectId;
+                const statusBadge = b.status === 'Approved' ? '<span class="px-2 py-1 text-xs font-bold bg-green-100 text-green-700 rounded-lg">معتمد</span>' :
+                    b.status === 'Rejected' ? '<span class="px-2 py-1 text-xs font-bold bg-red-100 text-red-700 rounded-lg">مرفوض</span>' :
+                        '<span class="px-2 py-1 text-xs font-bold bg-amber-100 text-amber-700 rounded-lg">قيد المراجعة</span>';
+                return `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover:border-purple-300 transition">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h4 class="font-bold text-gray-800 text-lg">${b.title}</h4>
+                                <div class="text-xs text-gray-500 mt-1"><i class="fas fa-calendar-alt ml-1"></i>${new Date(b.date).toLocaleDateString('ar-EG')}</div>
+                            </div>
+                            ${statusBadge}
+                        </div>
+                        <div class="bg-gray-50 p-2 rounded-lg text-sm mb-3">
+                            <div class="flex justify-between mb-1"><span class="text-gray-500">الفصل:</span> <span class="font-bold text-gray-700">${cname}</span></div>
+                            <div class="flex justify-between mb-1"><span class="text-gray-500">المادة:</span> <span class="font-bold text-gray-700">${sname}</span></div>
+                            <div class="flex justify-between mb-1"><span class="text-gray-500">الطلاب المقيمين:</span> <span class="font-bold text-gray-700">${b.studentCount}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">الدرجة الكاملة:</span> <span class="font-bold text-gray-700">${b.maxScore}</span></div>
+                        </div>
+                        <button class="w-full py-2 text-sm font-bold bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition opacity-50 cursor-not-allowed">
+                            تفاصيل التقييم (قريباً)
+                        </button>
+                    </div>
+                `;
+            }).join('') + '</div>';
+        } catch (e) {
+            container.innerHTML = `<div class="p-8 text-center text-red-500 bg-red-50 rounded-xl">${e.message}</div>`;
+        }
+    },
+
+    async _loadAssessStudents(classId) {
+        const detailsArea = document.getElementById('assessDetails');
+        const listArea = document.getElementById('assessStudentList');
+
+        if (!classId) {
+            detailsArea.classList.add('hidden');
+            this._assessStudents = null;
+            return;
+        }
+
+        detailsArea.classList.remove('hidden');
+        listArea.innerHTML = '<div class="p-8 text-center"><div class="spinner mx-auto border-gray-300 border-t-purple-600"></div></div>';
+
+        try {
+            const res = await App.call('getClassStudents', { classId: classId });
+            if (!res.success) throw new Error(res.message);
+            this._assessStudents = res.students;
+
+            const maxScore = parseFloat(document.getElementById('assessMaxScore').value) || 10;
+
+            listArea.innerHTML = res.students.length ? res.students.map(s => `
+                <div class="flex items-center gap-3 p-3 hover:bg-gray-50 transition">
+                    <div class="flex-1 font-bold text-gray-800 text-sm">${UI.formatName(s.name)}</div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="ascore_${s.id}" min="0" max="${maxScore}" placeholder="-"
+                            class="w-20 p-2 border border-gray-200 rounded-lg text-center font-bold text-gray-700 outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 text-sm">
+                        <span class="text-gray-400 text-xs font-bold">/ ${maxScore}</span>
+                    </div>
+                    <input type="text" id="acomment_${s.id}" placeholder="تعليق..." class="w-32 p-2 border border-gray-200 rounded-lg text-xs bg-gray-50 outline-none focus:ring-2 focus:ring-purple-400">
+                </div>
+            `).join('') : '<div class="p-10 text-center text-gray-400">لا يوجد طلاب</div>';
+        } catch (e) {
+            listArea.innerHTML = `<div class="p-8 text-center text-red-500">${e.message}</div>`;
+        }
+    },
+
+    _fillAllScores() {
+        const max = document.getElementById('assessMaxScore').value;
+        document.querySelectorAll('[id^="ascore_"]').forEach(inp => inp.value = max);
+    },
+
+    async submitAssessments() {
+        const title = document.getElementById('assessTitle').value.trim();
+        const date = document.getElementById('assessDate').value;
+        const maxScore = parseFloat(document.getElementById('assessMaxScore').value);
+        const classId = document.getElementById('modAssessClassSelect').value;
+        const subjectId = document.getElementById('modAssessSubjectSelect').value;
+
+        if (!title) return alert("الرجاء كتابة عنوان التقييم");
+        if (!date) return alert("الرجاء تحديد التاريخ");
+        if (!maxScore || maxScore <= 0) return alert("الرجاء تحديد الدرجة الكاملة");
+        if (!classId) return alert("الرجاء اختيار الفصل");
+        if (!subjectId) return alert("الرجاء اختيار المادة");
+        if (!this._assessStudents || !this._assessStudents.length) return alert("لا يوجد طلاب في هذا الفصل");
+
+        const students = this._assessStudents.map(s => {
+            const scoreEl = document.getElementById(`ascore_${s.id}`);
+            const commentEl = document.getElementById(`acomment_${s.id}`);
+            return {
+                id: s.id,
+                score: scoreEl ? scoreEl.value : "",
+                comment: commentEl ? commentEl.value.trim() : ""
+            };
+        });
+
+        UI.showError("جاري الحفظ...", "blue");
+
+        try {
+            const res = await App.call('saveAssessments', {
+                teacherId: App.user.userId,
+                classId: classId,
+                subjectId: subjectId,
+                title,
+                date,
+                maxScore,
+                students
+            });
+
+            if (res.success) {
+                UI.showError("تم حفظ التقييمات بنجاح ✓", "green");
+                // Reset form
+                document.getElementById('assessTitle').value = '';
+                document.getElementById('modAssessClassSelect').value = '';
+                document.getElementById('modAssessSubjectSelect').value = '';
+                document.getElementById('assessDetails').classList.add('hidden');
+                this._assessStudents = null;
+            } else {
+                alert("فشل الحفظ: " + res.message);
+            }
+        } catch (e) {
+            alert("خطأ: " + e.message);
+        }
+    }
 
 };
